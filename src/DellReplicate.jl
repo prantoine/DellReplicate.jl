@@ -8,6 +8,11 @@ module DellReplicate
     using Impute
     using BenchmarkTools
 
+    """
+        gen_vars_fig1!(df::DataFrame)
+    Generates the necessary mean temperature and precipiation variables for the two graphs of `Figure 1`, given the climate panel data.
+    Returns the modified version of input `df`.
+    """
     function gen_vars_fig1!(df)
 
         println(size(df))
@@ -37,6 +42,10 @@ module DellReplicate
 
         transform!(groupby(merged_result, :parent), :wpretemp00s => mean∘skipmissing => :wpre00s)
         transform!(groupby(merged_result, :parent), :wpretemp50s => mean∘skipmissing => :wpre50s)
+        transform!(groupby(merged_result, :parent), :wtemtemp00s => mean∘skipmissing => :wtem00s)
+        transform!(groupby(merged_result, :parent), :wtemtemp50s => mean∘skipmissing => :wtem50s)
+
+        println(merged_result[1:128, [:year, :parent, :wpre50s, :wtem50s, :wpre00s, :wtem00s]])
         return merged_result
     end
 
@@ -79,6 +88,7 @@ module DellReplicate
         
         transform!(groupby(merged_climate_panel, :parent), eachindex => :countrows)
         merged_climate_panel = merged_climate_panel[(merged_climate_panel.countrows .== 1), :]
+        println(merged_climate_panel[1:128, [:year, :parent, :wpre50s, :wtem50s, :wpre00s, :wtem00s]])
 
     end
     figure1()
