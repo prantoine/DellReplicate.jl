@@ -50,8 +50,14 @@ module DellReplicate
         return merged_result
     end
 
-    function figure1()
-        
+    """
+        read_csv(fn::String)
+
+    Creates a `DataFrame` object from a `.csv` file, where `fn` is the file name. May only work if ran from a directory where `assets` if is in the same
+    parent directory. 
+    """
+    function read_csv(fn::String)
+
         if splitdir(pwd())[2] != "assets" && splitdir(pwd())[2] != "docs"
             cd(joinpath(pwd(), "assets"))
         elseif splitdir(pwd())[2] == "docs"
@@ -60,10 +66,20 @@ module DellReplicate
             println("Already in the right dir, can now read the CSV file...")
         else
             println("Wrong path, aborting")
+            return nothing
         end
 
-        climate_panel_gdp = CSV.read(joinpath(pwd(), "climate_panel_csv.csv"), DataFrame)
-        climate_panel = CSV.read(joinpath(pwd(), "climate_panel_csv.csv"), DataFrame)
+        return CSV.read(joinpath(pwd(), fn, DataFrame))
+
+    """
+       figure1_data_cleaner() 
+    Loads the `climate_panel_csv` dataset and reproduces Dell's (2012) `makefigure1.do` commands. Returns a `DataFrame` object
+    which can be used by ???
+    """
+    function figure1_data_cleaner(raw_df_name::String)
+
+        climate_panel_gdp = read_csv(raw_df_name)
+        climate_panel = read_csv(raw_df_name)
 
         climate_panel_gdp = climate_panel_gdp[(climate_panel_gdp.year .== 2000), :]
         climate_panel_gdp[!, :lngdp2000] .= log.(climate_panel_gdp.rgdpl)
@@ -91,9 +107,16 @@ module DellReplicate
         
         transform!(groupby(merged_climate_panel, :parent), eachindex => :countrows)
         merged_climate_panel = merged_climate_panel[(merged_climate_panel.countrows .== 1), :]
-        println(merged_climate_panel[1:128, [:year, :parent, :wpre50s, :wtem50s, :wpre00s, :wtem00s]])
+
+        return merged_climate_panel
+    end
+
+    function figure1_visualise(df::String)
+        
+        clean_df = figure1_data_cleaner(df)
 
     end
-    figure1()
+
+    figure1_visualise("climate_panel_csv.csv")
 
 end
