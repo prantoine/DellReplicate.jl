@@ -5,11 +5,14 @@ module DellReplicate
     using CSV
     using ShiftedArrays: lag
     using Statistics
+    using Impute
+    using BenchmarkTools
 
     function gen_vars_fig1!(df)
 
+        println(size(df))
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
-        df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2006), :]
+        df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
 
         for var in [:wtem, :wpre]
             println("treating $var")
@@ -26,12 +29,15 @@ module DellReplicate
         select!(df2, ["year", "parent", "wtemtemp50s", "wtem50s", "wpretemp50s", "wpre50s"])
         select!(df3, ["year", "parent", "wtemtemp00s", "wtem00s", "wpretemp00s", "wpre00s"])
         println(size(df2), size(df3))
-        test = outerjoin(df3, df2, on=[:year, :parent])
-        sort!(test, [:parent, :year])
-        println(test)
+        temp_temps = outerjoin(df3, df2, on=[:year, :parent])
+        sort!(temp_temps, [:parent, :year])
+        
+        merged_result = outerjoin(df, temp_temps, on=[:year, :parent])
+        sort!(merged_result, [:parent, :year])
 
-        #test = outerjoin(df, df2, on=[:year, :parent])
-        return df
+        transform!(groupby(merged_result, :parent), :wpretemp00s => mean∘skipmissing => :wpre00s)
+        transform!(groupby(merged_result, :parent), :wpretemp50s => mean∘skipmissing => :wpre50s)
+        return merged_result
     end
 
     function figure1()
@@ -70,10 +76,11 @@ module DellReplicate
         sort!(merged_climate_panel, :parent)
 
         merged_climate_panel = gen_vars_fig1!(merged_climate_panel)
-        #println(merged_climate_panel[70:100,:])
+        
+        transform!(groupby(merged_climate_panel, :parent), eachindex => :countrows)
+        merged_climate_panel = merged_climate_panel[(merged_climate_panel.countrows .== 1), :]
 
     end
-
     figure1()
 
 end
