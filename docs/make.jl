@@ -1,3 +1,5 @@
+push!(LOAD_PATH, "../src/")
+
 using DellReplicate
 using Documenter
 

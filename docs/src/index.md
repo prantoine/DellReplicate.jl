@@ -12,3 +12,7 @@ Documentation for [DellReplicate](https://github.com/prantoine/DellReplicate.jl)
 ```@autodocs
 Modules = [DellReplicate]
 ```
+
+```@docs
+gen_vars_fig1!
+```

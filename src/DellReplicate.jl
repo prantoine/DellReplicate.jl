@@ -1,8 +1,9 @@
 module DellReplicate
 
 # Write your package code here.
-    using DataFrames
+
     using CSV
+    using DataFrames
     using ShiftedArrays: lag
     using Statistics
     using Impute
@@ -51,8 +52,10 @@ module DellReplicate
 
     function figure1()
         
-        if splitdir(pwd())[2] != "assets"
+        if splitdir(pwd())[2] != "assets" && splitdir(pwd())[2] != "docs"
             cd(joinpath(pwd(), "assets"))
+        elseif splitdir(pwd())[2] == "docs"
+            cd(joinpath(dirname(pwd()), "assets"))
         elseif splitdir(pwd())[2] == "assets"
             println("Already in the right dir, can now read the CSV file...")
         else
