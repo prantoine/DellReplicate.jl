@@ -69,7 +69,9 @@ module DellReplicate
             return nothing
         end
 
-        return CSV.read(joinpath(pwd(), fn, DataFrame))
+        return CSV.read(joinpath(pwd(), fn), DataFrame)
+
+    end
 
     """
        figure1_data_cleaner() 
@@ -111,6 +113,11 @@ module DellReplicate
         return merged_climate_panel
     end
 
+    """
+       figure1_visualise(df::String)
+    Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
+    dataset.
+    """
     function figure1_visualise(df::String)
         
         clean_df = figure1_data_cleaner(df)
