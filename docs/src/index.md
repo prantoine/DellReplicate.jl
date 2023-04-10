@@ -13,7 +13,3 @@ HELLO IS THIS WORKING ?
 ```@autodocs
 Modules = [DellReplicate]
 ```
-
-```@docs
-gen_vars_fig1!
-```
