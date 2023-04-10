@@ -11,6 +11,7 @@ module DellReplicate
 
     """
         gen_vars_fig1!(df::DataFrame)
+
     Generates the necessary mean temperature and precipiation variables for the two graphs of `Figure 1`, given the climate panel data.
     Returns the modified version of input `df`.
     """
@@ -74,7 +75,8 @@ module DellReplicate
     end
 
     """
-       figure1_data_cleaner() 
+        figure1_data_cleaner() 
+
     Loads the `climate_panel_csv` dataset and reproduces Dell's (2012) `makefigure1.do` commands. Returns a `DataFrame` object
     which can be used by ???
     """
@@ -114,7 +116,8 @@ module DellReplicate
     end
 
     """
-       figure1_visualise(df::String)
+        figure1_visualise(df::String)
+
     Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
     dataset.
     """
