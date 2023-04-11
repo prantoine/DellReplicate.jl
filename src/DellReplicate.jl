@@ -126,33 +126,42 @@ module DellReplicate
         
         clean_df = figure1_data_cleaner(df)
 
-        test = [ collect(clean_df[row_ind, [:wtem00s, :wtem50s, :wtemmax, :wtemmin, :lngdp2000]]) for (row_ind, row) in enumerate(eachrow(clean_df))]
+        test = [ collect(clean_df[row_ind, [:wtem00s, :wtem50s, :wtemmax, :wtemmin, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(clean_df))]
 
         # generate some random data for 3 observations
         
-        mins = [ row[4] for row in test ]
+        avg_00 = [ row[1] for row in test ]
+        avg_50 = [ row[2] for row in test ]
         maxs = [ row[3] for row in test ]
+        mins = [ row[4] for row in test ]
         lngdp = [ row[5] for row in test ]
-        println(lngdp)
+        country = [ row[6] for row in test ]
 
         # create a scatter plot with vertical ranges
-        p1 = plot()
+        p1 = plot(size=(800,600),titlefont=font(18, :red, :left, :bold, 1.1))
         for i in 1:size(test)[1]
-            plot!(lngdp, [mins[i], maxs[i]], color=:grey, linewidth=2, label="")
-            println(i)
+            if !ismissing(lngdp[i])
+            plot!([lngdp[i],lngdp[i]],[mins[i], maxs[i]], color=:grey, linewidth=1.3, label="")
+            end
         end
-        xlims!(5, 11) # set the x-axis limits
-        ylims!(-10, 30) # set the y-axis limits
-        xticks!(1:10) # set the ticks and labels for the x-axis
-        ylabel!("Vertical Range") # set the label for the y-axis
+        scatter!(lngdp, avg_00, marker=:star5, color=:red, label="Mean 1996-2005")
+        scatter!(lngdp, avg_50, marker=:cross, color=:blue, label="Mean 1950-1959")
+        xlims!(minimum(skipmissing(lngdp))-0.5, maximum(skipmissing(lngdp))+0.5) 
+        ylims!(-10, 30) 
+        xticks!(1:10) 
         
         # annotate the country codes next to each range
-        for i in 1:size(test)[1]
-            x = i
+        for i in eachindex(country)
+            x = lngdp[i]
             y = (mins[i] + maxs[i]) / 2
-            #annotate!(data[i, 4], (x + 0.2, y), ha=:left, va=:center, color=:black, fontsize=8)
+            annotate!(x + 0.15, y, text(country[i], 5))
         end
-display(p1)
+        
+        ylabel!("Degrees") 
+        xlabel!("Log per-capita GDP in 2000")
+        title!("Temperature", )
+        display(p1)
+
     end
 
     figure1_visualise("climate_panel_csv.csv")
