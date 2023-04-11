@@ -1,5 +1,5 @@
 ```@meta
-Current Module = DellReplicate
+CurrentModule = DellReplicate
 ```
 # Figure 1 functions
 

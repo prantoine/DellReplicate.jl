@@ -8,6 +8,7 @@ module DellReplicate
     using Statistics
     using Impute
     using BenchmarkTools
+    using Plots
 
     """
         gen_vars_fig1!(df::DataFrame)
@@ -47,7 +48,6 @@ module DellReplicate
         transform!(groupby(merged_result, :parent), :wtemtemp00s => mean∘skipmissing => :wtem00s)
         transform!(groupby(merged_result, :parent), :wtemtemp50s => mean∘skipmissing => :wtem50s)
 
-        println(merged_result[1:128, [:year, :parent, :wpre50s, :wtem50s, :wpre00s, :wtem00s]])
         return merged_result
     end
 
@@ -123,8 +123,36 @@ module DellReplicate
     """
     function figure1_visualise(df::String)
         
+        
         clean_df = figure1_data_cleaner(df)
 
+        test = [ collect(clean_df[row_ind, [:wtem00s, :wtem50s, :wtemmax, :wtemmin, :lngdp2000]]) for (row_ind, row) in enumerate(eachrow(clean_df))]
+
+        # generate some random data for 3 observations
+        
+        mins = [ row[4] for row in test ]
+        maxs = [ row[3] for row in test ]
+        lngdp = [ row[5] for row in test ]
+        println(lngdp)
+
+        # create a scatter plot with vertical ranges
+        p1 = plot()
+        for i in 1:size(test)[1]
+            plot!(lngdp, [mins[i], maxs[i]], color=:grey, linewidth=2, label="")
+            println(i)
+        end
+        xlims!(5, 11) # set the x-axis limits
+        ylims!(-10, 30) # set the y-axis limits
+        xticks!(1:10) # set the ticks and labels for the x-axis
+        ylabel!("Vertical Range") # set the label for the y-axis
+        
+        # annotate the country codes next to each range
+        for i in 1:size(test)[1]
+            x = i
+            y = (mins[i] + maxs[i]) / 2
+            #annotate!(data[i, 4], (x + 0.2, y), ha=:left, va=:center, color=:black, fontsize=8)
+        end
+display(p1)
     end
 
     figure1_visualise("climate_panel_csv.csv")
