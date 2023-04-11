@@ -6,5 +6,3 @@ CurrentModule = DellReplicate
 
 Documentation for [DellReplicate](https://github.com/prantoine/DellReplicate.jl).
 
-```@index
-```
