@@ -9,6 +9,7 @@ module DellReplicate
     using Impute
     using BenchmarkTools
     using Plots
+    using Logging
 
     """
         gen_vars_fig1!(df::DataFrame)
@@ -23,8 +24,7 @@ module DellReplicate
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
 
         for var in [:wtem, :wpre]
-            println("treating $var")
-
+            
             df = transform(groupby(df, :parent), var => maximum => "$(var)max")
             transform!(groupby(df, :parent), var => minimum => "$(var)min")
             df2 = transform(groupby(df2, :parent), var => (x -> mean(x)) => "$(var)temp50s")
@@ -36,17 +36,16 @@ module DellReplicate
 
         select!(df2, ["year", "parent", "wtemtemp50s", "wtem50s", "wpretemp50s", "wpre50s"])
         select!(df3, ["year", "parent", "wtemtemp00s", "wtem00s", "wpretemp00s", "wpre00s"])
-        println(size(df2), size(df3))
         temp_temps = outerjoin(df3, df2, on=[:year, :parent])
         sort!(temp_temps, [:parent, :year])
         
         merged_result = outerjoin(df, temp_temps, on=[:year, :parent])
         sort!(merged_result, [:parent, :year])
 
-        transform!(groupby(merged_result, :parent), :wpretemp00s => mean∘skipmissing => :wpre00s)
-        transform!(groupby(merged_result, :parent), :wpretemp50s => mean∘skipmissing => :wpre50s)
-        transform!(groupby(merged_result, :parent), :wtemtemp00s => mean∘skipmissing => :wtem00s)
-        transform!(groupby(merged_result, :parent), :wtemtemp50s => mean∘skipmissing => :wtem50s)
+        transform!(groupby(merged_result, :parent), :wpretemp00s => mean∘skipmissing => :wpre00s,
+                                                    :wpretemp50s => mean∘skipmissing => :wpre50s,
+                                                    :wtemtemp00s => mean∘skipmissing => :wtem00s,
+                                                    :wtemtemp50s => mean∘skipmissing => :wtem50s)
 
         return merged_result
     end
@@ -61,12 +60,14 @@ module DellReplicate
 
         if splitdir(pwd())[2] != "assets" && splitdir(pwd())[2] != "docs"
             cd(joinpath(pwd(), "assets"))
+            @warn "Changed the directory to find the data file."
         elseif splitdir(pwd())[2] == "docs"
             cd(joinpath(dirname(pwd()), "assets"))
+            @warn "Changed the directory to find the data file."
         elseif splitdir(pwd())[2] == "assets"
-            println("Already in the right dir, can now read the CSV file...")
+            @info "Already in the right dir, can now read the CSV file."
         else
-            println("Wrong path, aborting")
+            @error "Wrong path, aborting."
             return nothing
         end
 
@@ -78,7 +79,7 @@ module DellReplicate
         figure1_data_cleaner() 
 
     Loads the `climate_panel_csv` dataset and reproduces Dell's (2012) `makefigure1.do` commands. Returns a `DataFrame` object
-    which can be used by ???
+    which can be used by `figure1_visualise()`.
     """
     function figure1_data_cleaner(raw_df_name::String)
 
@@ -119,12 +120,13 @@ module DellReplicate
         figure1_visualise(df::String)
 
     Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
-    dataset.
+    dataset. The figure is a combination of 128 line plots (one for each country) showing the temperature range and two scatter plots showing the mean temperature
+    values for the periods 1950-1959 and 1996-2005.
     """
-    function figure1_visualise(df::String)
+    function figure1_visualise(df_name::String)
         
         
-        clean_df = figure1_data_cleaner(df)
+        clean_df = figure1_data_cleaner(df_name)
 
         test = [ collect(clean_df[row_ind, [:wtem00s, :wtem50s, :wtemmax, :wtemmin, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(clean_df))]
 
@@ -164,7 +166,41 @@ module DellReplicate
 
     end
 
-    figure1_visualise("climate_panel_csv.csv")
+    function figure2_visualise(df_name::String)
+
+        climate_panel = read_csv(df_name)
+        climate_panel = climate_panel[(climate_panel.year .<= 2003), :]
+
+        sort!(climate_panel, [:fips60_06, :year])
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
+        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
+        transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
+                                                          :lngdppwt => lag => :temp_lag_gdp_PWT)
+
+        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
+        climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
+        select!(climate_panel, Not(:temp_lag_gdp_WDI))
+        select!(climate_panel, Not(:temp_lag_gdp_PWT))
+
+        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
+        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
+        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+
+       # growth Lags for lnag lnind lngdpwdi lninvest 
+        transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
+
+        for var in [ :ag, :ind, :gdpwdi, :invest ]
+            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        end
+
+        # Drop if less than 20 years of GDP values
+        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
+        transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
+        climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
+
+    end
+
+    figure2_visualise("climate_panel_csv.csv")
 
     """
     function make_table_1(raw_df_name::String)
