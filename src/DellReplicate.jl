@@ -166,4 +166,19 @@ module DellReplicate
 
     figure1_visualise("climate_panel_csv.csv")
 
+    """
+    function make_table_1(raw_df_name::String)
+        Create summary statistics of the Data.
+
+    """
+    function make_table_1(raw_df_name::String)
+        climate_panel = read_csv(raw_df_name)
+        filter!(:year => <=(2003), climate_panel)
+        transform!(climate_panel, :rgdpl => ByRow(x -> log(x)) => :lgdp)
+        #it looks ok but there is a small difference with stata.
+    end
+    
+    make_table_1("climate_panel_csv.csv")
 end
+
+
