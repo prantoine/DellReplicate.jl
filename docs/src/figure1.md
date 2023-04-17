@@ -1,7 +1,7 @@
 ```@meta
 CurrentModule = DellReplicate
 ```
-# Figure 1 functions
+# Functions for Figure 1.
 
 This page contains the functions used to generate ` Figure 1` of Dell (2012).
 

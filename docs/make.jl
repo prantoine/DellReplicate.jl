@@ -19,6 +19,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Figure 1" => "figure1.md",
+        "Table 1" => "table1.md",
     ],
 )
 
