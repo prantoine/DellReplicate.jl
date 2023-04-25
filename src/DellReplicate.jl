@@ -291,7 +291,7 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
     end
-    
+    make_table1("climate_panel_csv.csv")
     figure2_visualise("climate_panel_csv.csv")
 end
 
