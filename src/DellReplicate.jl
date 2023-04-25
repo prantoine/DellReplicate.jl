@@ -170,12 +170,13 @@ module DellReplicate
         growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
     Adds a new column to `df` with the name `g_var_name` computing the growth of `var_name`.
     """
-    function growth_var!(df::DataFrames.DataFrame, var_name::Symbol)
+    function growth_var!(df::DataFrame, var_name::Symbol)
 
         temp_var = ":$(var_name)_temp"
         g_var = "g_$(var_name)"
-        transform!(groupby(df, :fips60_06), var_name => lag => temp_var)
-        df[!, g_var] .= ( df[:, var_name] .- df[:, temp_var] ) .* 100
+        ln_name = ":ln$(var_name)"
+        transform!(groupby(df, :fips60_06), ln_name => lag => temp_var)
+        df[!, g_var] .= ( df[:, ln_name] .- df[:, temp_var] ) .* 100
         select!(df, Not(temp_var))
     
     end
@@ -242,7 +243,7 @@ module DellReplicate
     """
         function make_table_1(raw_df_name::String)
     
-    Create summary statistics of the Data.
+        Create summary statistics of the Data.
 
     """
     function make_table1(raw_df_name::String)
@@ -273,7 +274,7 @@ module DellReplicate
         climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
         climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
         select!(climate_panel, Not(:temp_lag_gdp_WDI))
-        select!(climate_panel, Not(:temp_lag_gdp_PWT))
+        select!(climate_panel , Not(:temp_lag_gdp_PWT))
 
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
@@ -292,7 +293,7 @@ module DellReplicate
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
     end
     make_table1("climate_panel_csv.csv")
-    figure2_visualise("climate_panel_csv.csv")
+    #figure2_visualise("climate_panel_csv.csv")
 end
 
 
