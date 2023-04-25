@@ -166,10 +166,16 @@ module DellReplicate
 
     end
 
+    """
+        growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
+    Adds a new column to `df` with the name `g_var_name` computing the growth of `var_name`.
+    """
     function growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
 
-        transform!(groupby(df, :fips60_06), var_name => lag => :temp_lag_var)
-        df[!, g_var_name] .= ( df[:, var_name] .- df.temp_lag_var ) .* 100
+        temp_var = ":$(var_name)_temp"
+        transform!(groupby(df, :fips60_06), var_name => lag => temp_var)
+        df[!, g_var_name] .= ( df[:, var_name] .- df[:, temp_var] ) .* 100
+        select!(df, Not(temp_var))
     
     end
 
@@ -186,9 +192,7 @@ module DellReplicate
         growth_var!(climate_panel, :g, :lngdpwdi)
         growth_var!(climate_panel, :gpwt, :lngdppwt)
 
-        select!(climate_panel, Not(:temp_lag_gdp_WDI))
-        select!(climate_panel, Not(:temp_lag_gdp_PWT))
-        println(climate_panel[:, [:g, :gtest, :gpwt, :gpwttest]])
+        println(climate_panel[:, [:g, :gpwt]])
 
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
