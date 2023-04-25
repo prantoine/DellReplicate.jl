@@ -170,11 +170,12 @@ module DellReplicate
         growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
     Adds a new column to `df` with the name `g_var_name` computing the growth of `var_name`.
     """
-    function growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
+    function growth_var!(df::DataFrames.DataFrame, var_name::Symbol)
 
         temp_var = ":$(var_name)_temp"
+        g_var = "g_$(var_name)"
         transform!(groupby(df, :fips60_06), var_name => lag => temp_var)
-        df[!, g_var_name] .= ( df[:, var_name] .- df[:, temp_var] ) .* 100
+        df[!, g_var] .= ( df[:, var_name] .- df[:, temp_var] ) .* 100
         select!(df, Not(temp_var))
     
     end
@@ -189,10 +190,10 @@ module DellReplicate
         # Direct broadcast is faster
         climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
         climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
-        growth_var!(climate_panel, :g, :lngdpwdi)
-        growth_var!(climate_panel, :gpwt, :lngdppwt)
+        growth_var!(climate_panel, :lngdpwdi)
+        growth_var!(climate_panel, :lngdppwt)
 
-        println(climate_panel[:, [:g, :gpwt]])
+        println(climate_panel[:, [:g_lngdpwdi, :g_lngdppwt]])
 
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
