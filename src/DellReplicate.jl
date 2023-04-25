@@ -226,9 +226,39 @@ module DellReplicate
 
         sort!(climate_panel, [:fips60_06, :year])
         println(climate_panel[1:200, [:fips60_06, :year, :lgdp1, :lgdp2]])
+        
+        transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi)
 
-    end
+        benchlog_1 = @btime $climate_panel[!, :lngdpwdi] .= log.($climate_panel.gdpLCU)
+        benchlog_2 = @btime transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi2)
+        println(benchlog_1[1:1,:], benchlog_2[1:1,:])
     
+        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
+        transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
+                                                          :lngdppwt => lag => :temp_lag_gdp_PWT)
+
+        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
+        climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
+        select!(climate_panel, Not(:temp_lag_gdp_WDI))
+        select!(climate_panel, Not(:temp_lag_gdp_PWT))
+
+        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
+        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
+        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+
+       # growth Lags for lnag lnind lngdpwdi lninvest 
+        transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
+
+        for var in [ :ag, :ind, :gdpwdi, :invest ]
+            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        end
+
+        # Drop if less than 20 years of GDP values
+        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
+        transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
+        climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
+    end
+    make_table_1("climate_panel_csv.csv")
     figure1_visualise("climate_panel_csv.csv")
 end
 
