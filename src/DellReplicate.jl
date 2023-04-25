@@ -173,9 +173,9 @@ module DellReplicate
 
         sort!(climate_panel, [:fips60_06, :year])
         
-        benchlog_1 = @btime $climate_panel[!, :lngdpwdi] .= log.($climate_panel.gdpLCU)
-        benchlog_2 = @btime transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi2)
-        println(benchlog_1[1:1,:], benchlog_2[1:1,:])
+        # Direct broadcast is faster
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
+        #println(benchlog_1[1:1,:], benchlog_2[1:1,:])
     
         climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
         transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
@@ -202,6 +202,30 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
 
+        # Create 3 copies to be merged
+        temp1 = copy(climate_panel)
+        filter!(:lnrgdpl_t0 => (x -> !ismissing.(x)), temp1)
+        transform!(groupby(temp1, :fips60_06), eachindex => :countrows)
+        filter!(:countrows => ==(1), temp1)
+        temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
+        # CAREFUL ABOUT THE SORTING
+        sort!(temp1, :initgdpbin)
+        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        select!(temp1, [:fips60_06, :initgdpbin])
+        
+        merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
+        transform!(merged_1, :initgdpbin .=> (x -> ifelse.(skipmissing.(x) .== 1, 1, 0)) .=> :initgdpxtile1,
+                             :initgdpbin .=> (x -> ifelse.(skipmissing.(x) .== 2, 1 ,0)) .=> :initgdpxtile2)
+        #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .!= 2, 0, 1) 
+        #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .== 2, 1, 0)
+        println(merged_1[1:200, [:fips60_06, :initgdpbin, :lnag, :initgdpxtile1, :initgdpxtile2,:year]])
+
+        temp2 = copy(climate_panel)
+
+        temp3 = copy(climate_panel)
+
+
+
     end
 
     #figure2_visualise("climate_panel_csv.csv")
@@ -212,7 +236,7 @@ module DellReplicate
     Create summary statistics of the Data.
 
     """
-    function make_table_1(raw_df_name::String)
+    function make_table1(raw_df_name::String)
 
         climate_panel = read_csv(raw_df_name)
 
@@ -258,8 +282,8 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
     end
-    make_table_1("climate_panel_csv.csv")
-    figure1_visualise("climate_panel_csv.csv")
+    
+    figure2_visualise("climate_panel_csv.csv")
 end
 
 
