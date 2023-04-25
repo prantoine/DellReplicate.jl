@@ -166,6 +166,13 @@ module DellReplicate
 
     end
 
+    function growth_var!(df::DataFrames.DataFrame, g_var_name::Symbol, var_name::Symbol)
+
+        transform!(groupby(df, :fips60_06), var_name => lag => :temp_lag_var)
+        df[!, g_var_name] .= ( df[:, var_name] .- df.temp_lag_var ) .* 100
+    
+    end
+
     function figure2_visualise(df_name::String)
 
         climate_panel = read_csv(df_name)
@@ -175,16 +182,13 @@ module DellReplicate
         
         # Direct broadcast is faster
         climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
-        #println(benchlog_1[1:1,:], benchlog_2[1:1,:])
-    
         climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
-        transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
-                                                          :lngdppwt => lag => :temp_lag_gdp_PWT)
+        growth_var!(climate_panel, :g, :lngdpwdi)
+        growth_var!(climate_panel, :gpwt, :lngdppwt)
 
-        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
-        climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
         select!(climate_panel, Not(:temp_lag_gdp_WDI))
         select!(climate_panel, Not(:temp_lag_gdp_PWT))
+        println(climate_panel[:, [:g, :gtest, :gpwt, :gpwttest]])
 
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
@@ -218,7 +222,7 @@ module DellReplicate
                              :initgdpbin .=> (x -> ifelse.(skipmissing.(x) .== 2, 1 ,0)) .=> :initgdpxtile2)
         #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .!= 2, 0, 1) 
         #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .== 2, 1, 0)
-        println(merged_1[1:200, [:fips60_06, :initgdpbin, :lnag, :initgdpxtile1, :initgdpxtile2,:year]])
+        #println(merged_1[1:200, [:fips60_06, :initgdpbin, :lnag, :initgdpxtile1, :initgdpxtile2,:year]])
 
         temp2 = copy(climate_panel)
 
@@ -250,37 +254,7 @@ module DellReplicate
 
         sort!(climate_panel, [:fips60_06, :year])
         println(climate_panel[1:200, [:fips60_06, :year, :lgdp1, :lgdp2]])
-        
-        transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi)
 
-        benchlog_1 = @btime $climate_panel[!, :lngdpwdi] .= log.($climate_panel.gdpLCU)
-        benchlog_2 = @btime transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi2)
-        println(benchlog_1[1:1,:], benchlog_2[1:1,:])
-    
-        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
-        transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
-                                                          :lngdppwt => lag => :temp_lag_gdp_PWT)
-
-        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
-        climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
-        select!(climate_panel, Not(:temp_lag_gdp_WDI))
-        select!(climate_panel, Not(:temp_lag_gdp_PWT))
-
-        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
-        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
-        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
-
-       # growth Lags for lnag lnind lngdpwdi lninvest 
-        transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
-
-        for var in [ :ag, :ind, :gdpwdi, :invest ]
-            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
-        end
-
-        # Drop if less than 20 years of GDP values
-        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
-        transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
-        climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
     end
     
     figure2_visualise("climate_panel_csv.csv")
