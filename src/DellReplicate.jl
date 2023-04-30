@@ -174,9 +174,8 @@ module DellReplicate
 
         temp_var = ":$(var_name)_temp"
         g_var = "g_$(var_name)"
-        ln_name = ":ln$(var_name)"
-        transform!(groupby(df, :fips60_06), ln_name => lag => temp_var)
-        df[!, g_var] .= ( df[:, ln_name] .- df[:, temp_var] ) .* 100
+        transform!(groupby(df, :fips60_06), var_name => lag => temp_var)
+        df[!, g_var] .= ( df[:, var_name] .- df[:, temp_var] ) .* 100
         select!(df, Not(temp_var))
     
     end
@@ -194,8 +193,6 @@ module DellReplicate
         growth_var!(climate_panel, :lngdpwdi)
         growth_var!(climate_panel, :lngdppwt)
 
-        println(climate_panel[:, [:g_lngdpwdi, :g_lngdppwt]])
-
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
         climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
@@ -208,7 +205,7 @@ module DellReplicate
         end
 
         # Drop if less than 20 years of GDP values
-        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
+        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g_lngdpwdi), 0, 1)
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
 
@@ -222,19 +219,47 @@ module DellReplicate
         sort!(temp1, :initgdpbin)
         temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
         select!(temp1, [:fips60_06, :initgdpbin])
-        
         merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
-        transform!(merged_1, :initgdpbin .=> (x -> ifelse.(skipmissing.(x) .== 1, 1, 0)) .=> :initgdpxtile1,
-                             :initgdpbin .=> (x -> ifelse.(skipmissing.(x) .== 2, 1 ,0)) .=> :initgdpxtile2)
-        #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .!= 2, 0, 1) 
-        #merged_1[!, :initgdpxtile2] .= ifelse.(skipmissing.(merged_1.initgdpbin) .== 2, 1, 0)
-        #println(merged_1[1:200, [:fips60_06, :initgdpbin, :lnag, :initgdpxtile1, :initgdpxtile2,:year]])
+        merged_1[:, :initgdpbin] .= ifelse.(ismissing.(merged_1.initgdpbin), 999, merged_1.initgdpbin)
+        merged_1[!, :initgdpxtile1] .= ifelse.(merged_1.initgdpbin .== 1, 1, ifelse.(merged_1.initgdpbin .== 2, 0, missing))
+        merged_1[!, :initgdpxtile2] .= ifelse.(merged_1.initgdpbin .== 2, 1, ifelse.(merged_1.initgdpbin .== 1, 0, missing))
+        climate_panel = merged_1
 
         temp2 = copy(climate_panel)
+        filter!(:wtem50 => (x -> !ismissing.(x)), temp2)
+        transform!(groupby(temp2, :fips60_06), eachindex => :countrows)
+        filter!(:countrows => ==(1), temp2)
+        temp2[!, :initwtem50bin] .= temp2.wtem50 / size(temp2)[1]
+        sort!(temp2, :initwtem50bin)
+        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .< temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
+        select!(temp2, [:fips60_06, :initwtem50bin])
+        merged_2 = outerjoin(climate_panel, temp2, on=[:fips60_06])
+        merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
+        merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
+        merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
+        println(merged_2[1:200, [:fips60_06, :initwtem50bin, :initwtem50xtile1, :initwtem50xtile2]])
+        climate_panel = merged_2
 
         temp3 = copy(climate_panel)
+        filter!(:year => ==(1995), temp3)
+        sort!(temp3, [:fips60_06, :year])
+        temp3[!, :initagshare1995] .= log.(temp3.gdpSHAREAG) / size(temp3)[1]
+        println(temp3[:, [:year, :fips60_06, :initagshare1995]])
+        non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
+        sort!(temp3, :initagshare1995)
+        temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
+        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
+        temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
+        println(temp3[:, [:year, :fips60_06, :gdpSHAREAG, :initagshare1995]])
+        select!(temp3, [:fips60_06, :initagshare1995])
+        merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
+        merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
+        merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
+        merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
+        println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
+        climate_panel = merged_3
 
-
+        #CODES: 999 IF MISSING BIN
 
     end
 
@@ -292,8 +317,8 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
     end
-    make_table1("climate_panel_csv.csv")
-    #figure2_visualise("climate_panel_csv.csv")
+    #make_table1("climate_panel_csv.csv")
+    figure2_visualise("climate_panel_csv.csv")
 end
 
 
