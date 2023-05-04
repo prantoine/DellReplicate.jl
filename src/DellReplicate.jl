@@ -1,7 +1,5 @@
 module DellReplicate
 
-# Write your package code here.
-
     using CSV
     using DataFrames
     using ShiftedArrays: lag
@@ -180,6 +178,35 @@ module DellReplicate
     
     end
 
+    """
+        gen_vars_fig2(df::DataFrames.DataFrame)
+    Generates all the variables necessary for figure 2.
+    """
+    function gen_vars_fig2!(df::DataFrames.DataFrame)
+        
+        lag_df = df[:, [:year, :fips60_06, :wtem, :wpre, :wtem50, :wpre50]]
+
+        for var in [ "wtem", "wpre" ]
+            df[!, "$(var)Xlnrgdpl_t0"] .= df[:, var] .* df[:, :lnrgdpl_t0]
+            lag_df[!, "$(var)Xlnrgdpl_t0"] = df[:, "$(var)Xlnrgdpl_t0"]
+
+            for bin_var in [ "initagshare95xtile1", "initagshare95xtile2", "initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2"]
+                df[!, "$(var)_$(bin_var)"] .= df[:, var] .* df[:, bin_var]
+                lag_df[!, "$(var)_$(bin_var)"] = df[:, "$(var)_$(bin_var)"]
+            end
+
+        end
+        
+        vars_to_lag = [ var for var in names(lag_df) if var[1:4] in [ "wtem", "wpre" ]]
+
+        for var in vars_to_lag
+            transform!(groupby(lag_df, :fips60_06), var => lag => "L1$(var)") 
+            for n_lag in 2:10
+                transform!(groupby(lag_df, :fips60_06), "L$(n_lag-1)$(var)" => lag => "L$(n_lag)$(var)")
+            end
+        end
+    end
+
     function figure2_visualise(df_name::String)
 
         climate_panel = read_csv(df_name)
@@ -258,6 +285,8 @@ module DellReplicate
         merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
         println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
         climate_panel = merged_3
+
+        gen_vars_fig2!(climate_panel)
 
         #CODES: 999 IF MISSING BIN
 
