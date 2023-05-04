@@ -323,7 +323,7 @@ module DellReplicate
         climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
         climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
         climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
-
+        # Compute the growth rate for each value 
         for var in [:lnag, :lnind, :lngdpwdi, :lninvest]
             growth_var!(climate_panel, var)        
         end
@@ -333,10 +333,19 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         filter!(:nonmissing_sum_skipmissing => >=(20), climate_panel)
 
-        # climate_panel[:, :misdum] .= 0
-        # for X in (:gag, :gind)
-        #     climate_panel[:,X == missing][:, :misdum] = 1
-        # end
+        #Make sure all subcomponents are non-missing in a given year
+        climate_panel[!, :misdum] .= 0
+        function filter_transform!(df, pred, args)
+            fdf = filter(pred, df, view = true)
+            fdf .= transform(copy(fdf), args)
+        end
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,var => ismissing, :misdum => (b -> (b=1)) => :misdum)
+        end
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
+        end
+        
     end
     make_table1("climate_panel_csv.csv")
     #figure2_visualise("climate_panel_csv.csv")
