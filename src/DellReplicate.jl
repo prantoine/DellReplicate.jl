@@ -304,23 +304,13 @@ module DellReplicate
 
         climate_panel = read_csv(raw_df_name)
 
-        bench_filter = @btime filter!(:year => <=(2003), $climate_panel)
-        bench_copy = @btime $climate_panel = $climate_panel[($climate_panel.year .<= 2003), :]
-        println(bench_filter[1:1, :], bench_copy[1:1,:])
+        filter!(:year => <=(2003), climate_panel)
 
-        test1 = @btime transform!($climate_panel, :rgdpl => (x -> log.(x)) => :lgdp1)
-        test2 = @btime transform!($climate_panel, :rgdpl => ByRow(x -> log(x)) => :lgdp2)
-        println(test1[1:1, :],test2[1:1, :])
+        transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp1)
 
         sort!(climate_panel, [:fips60_06, :year])
 
-        #println(climate_panel[1:200, [:fips60_06, :year, :lgdp1, :lgdp2]])
-        transform!(climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi)
-
-        # benchlog_1 = @btime $climate_panel[!, :lngdpwdi] .= log.($climate_panel.gdpLCU)
-        # benchlog_2 = @btime transform!($climate_panel, :gdpLCU => (x -> log.(x)) => :lngdpwdi2)
-        # println(benchlog_1[1:1,:], benchlog_2[1:1,:])
-    
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
         climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
         transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
                                                           :lngdppwt => lag => :temp_lag_gdp_PWT)
@@ -335,27 +325,14 @@ module DellReplicate
         climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
 
         for var in [:lnag, :lnind, :lngdpwdi, :lninvest]
-            for g in [:gag, :gind, :ggdpwdi, :ginvest]
-                climate_panel[!, g] .= (climate_panel[:,var] .- lag(climate_panel[:,var])) .* 100
-            end
+            growth_var!(climate_panel, var)        
         end
-        println(climate_panel[10,:])
-       # growth Lags for lnag lnind lngdpwdi lninvest 
-        #transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
-        
-        # for var in [ :ag, :ind, :gdpwdi, :invest ]
-        #         for g in [:gag, :gind , :ggdpwdi, :ginvest]
-        #         climate_panel[!, g] .= ( climate_panel[:,var] .- lag(climate_panel[:,var]) ) .* 100
-        #         end
-        # end
-        first(climate_panel, 5)
 
         # Drop if less than 20 years of GDP values
         climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
-        climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :] 
+        filter!(:nonmissing_sum_skipmissing => >=(20), climate_panel)
 
-        
         # climate_panel[:, :misdum] .= 0
         # for X in (:gag, :gind)
         #     climate_panel[:,X == missing][:, :misdum] = 1
