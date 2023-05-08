@@ -348,6 +348,7 @@ module DellReplicate
         
     end
     make_table1("climate_panel_csv.csv")
+    #just to commit a change
     #figure2_visualise("climate_panel_csv.csv")
 end
 
