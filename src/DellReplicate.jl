@@ -8,6 +8,7 @@ module DellReplicate
     using BenchmarkTools
     using Plots
     using Logging
+    using CategoricalArrays
 
     """
         gen_vars_fig1!(df::DataFrame)
@@ -346,6 +347,15 @@ module DellReplicate
             filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
         end
         
+        tempxtile = dropmissing(climate_panel, :lnrgdpl_t0)
+        sort!(tempxtile, :fips60_06)
+        tempxtile = combine(first, groupby(tempxtile, :fips60_06))
+        function xtile(x; n=2)
+            q = quantile(x, LinRange(0, 1, n + 1))
+            map(v -> min(searchsortedlast(q, v), n), x)
+        end
+        transform!(tempxtile, log.(tempxtile.lnrgdpl_t0) => xtile => :initgdpbin )
+        println(tempxtile[!,[:fips60_06, :lnrgdpl_t0,:initgdpbin]])
     end
     make_table1("climate_panel_csv.csv")
     #just to commit a change
