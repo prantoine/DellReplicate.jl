@@ -182,7 +182,7 @@ module DellReplicate
         gen_vars_fig2(df::DataFrames.DataFrame)
     Generates all the variables necessary for figure 2.
     """
-    function gen_vars_fig2!(df::DataFrames.DataFrame)
+    function gen_lags_fig2(df::DataFrames.DataFrame)
         
         lag_df = df[:, [:year, :fips60_06, :wtem, :wpre, :wtem50, :wpre50]]
 
@@ -205,6 +205,24 @@ module DellReplicate
                 transform!(groupby(lag_df, :fips60_06), "L$(n_lag-1)$(var)" => lag => "L$(n_lag)$(var)")
             end
         end
+        #we should be at line 137 in the do file here !
+        return outerjoin(df, lag_df, on=[:fips60_06, :year], makeunique=true)
+
+    end
+
+    function gen_yearvars_fig2(df::DataFrames.DataFrame, years::Vector{Int64})
+        
+        region_vars = ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS"]
+        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initgdpxtile1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
+
+        for year in years
+            for region in region_vars
+                temp_df[!, Symbol(:RY, year, "X", region)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df[:, region]
+            end
+            temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initgdpxtile1
+        end
+        println(temp_df[53:54, [:RY1X_MENA, :yr_54, :RY53X_MENA, :RY54X_MENA,:year, :fips60_06]], size(temp_df))
+
     end
 
     function figure2_visualise(df_name::String)
@@ -286,8 +304,14 @@ module DellReplicate
         println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
         climate_panel = merged_3
 
-        gen_vars_fig2!(climate_panel)
-
+        climate_panel = gen_lags_fig2(climate_panel)
+        numyears = maximum([ size(subfd)[1] for subfd in groupby(climate_panel, :fips60_06)] ) - 1
+        unique_years = [year for year in range(1,numyears+1)]
+        println(unique_years)
+        transform!(groupby(climate_panel, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
+        gen_yearvars_fig2(climate_panel, unique_years)
+        #numyears = size()[1] - 1
+        #println(climate_panel[1:60, [:fips60_06, :year]])
         #CODES: 999 IF MISSING BIN
 
     end
@@ -347,8 +371,8 @@ module DellReplicate
         end
         
     end
-    make_table1("climate_panel_csv.csv")
-    #figure2_visualise("climate_panel_csv.csv")
+    #make_table1("climate_panel_csv.csv")
+    figure2_visualise("climate_panel_csv.csv")
 end
 
 
