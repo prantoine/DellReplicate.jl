@@ -18,7 +18,6 @@ module DellReplicate
     """
     function gen_vars_fig1!(df)
 
-        println(size(df))
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
 
@@ -70,7 +69,11 @@ module DellReplicate
             return nothing
         end
 
-        return CSV.read(joinpath(pwd(), fn), DataFrame)
+        result = CSV.read(joinpath(pwd(), fn), DataFrame)
+
+        
+        cd("..")
+        return result
 
     end
 
@@ -323,10 +326,10 @@ module DellReplicate
 
         # Drop if less than 20 years of GDP values
         climate_panel = keep_20yrs_gdp(climate_panel)
-        #climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
         climate_panel = gen_xtile_vars(climate_panel)
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
+
         println(size(climate_panel))
         #a few duplicates are created here.
 
@@ -400,8 +403,7 @@ module DellReplicate
         println(temp1[!,[:fips60_06, :initgdpbin]])
     end
 
-        #figure2_visualise("climate_panel_csv.csv")                     
-        make_table1("climate_panel_csv.csv")
+        figure2_visualise("climate_panel_csv.csv")                     
 
 end
 
