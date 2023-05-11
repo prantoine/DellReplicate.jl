@@ -388,16 +388,33 @@ module DellReplicate
             filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
         end
         
-        temp1 = copy(climate_panel)
-        temp1 = dropmissing(temp1, :lnrgdpl_t0)
-        sort!(temp1, :fips60_06)
-        temp1 = combine(first, groupby(temp1, :fips60_06))
-        temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
-        #CAREFUL ABOUT THE SORTING
-        sort!(temp1, :initgdpbin)
-        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
-        select!(temp1, [:fips60_06, :initgdpbin])
-        println(temp1[!,[:fips60_06, :initgdpbin]])
+        # temp1 = copy(climate_panel)
+        # temp1 = dropmissing(temp1, :lnrgdpl_t0)
+        # sort!(temp1, :fips60_06)
+        # temp1 = combine(first, groupby(temp1, :fips60_06))
+        # temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
+        # #CAREFUL ABOUT THE SORTING
+        # sort!(temp1, :initgdpbin)
+        # temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        # select!(temp1, [:fips60_06, :initgdpbin])
+        # println(temp1[!,[:fips60_06, :initgdpbin]])
+        climate_panel = gen_xtile_vars(climate_panel)
+        
+        for var in ["wtem", "wpre"]
+            climate_panel[!, "$(var)Xlnrgdpl_t0"] .= climate_panel[!, var] .* climate_panel[!, "lnrgdpl_t0"]
+            for name in ["initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2", "initagshare95xtile1", "initagshare95xtile2"]
+                climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
+            end
+        end
+        # for var in ["wtem", "wpre"]
+        #     for name in ["name1", "name2", "name3", "name4"]
+        #     println("Hi my name is $(var) and $(name)")
+        #     end
+        # end
+        println(mean(skipmissing(climate_panel[!,:wtem_initgdpxtile2])))
+        
+        
+        
     end
 
         #figure2_visualise("climate_panel_csv.csv")                     
