@@ -357,7 +357,7 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
                                                           :lngdppwt => lag => :temp_lag_gdp_PWT)
 
-        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
+        climate_panel[!, :gg] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
         climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
         select!(climate_panel, Not(:temp_lag_gdp_WDI))
         select!(climate_panel , Not(:temp_lag_gdp_PWT))
@@ -371,7 +371,7 @@ module DellReplicate
         end
 
         # Drop if less than 20 years of GDP values
-        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
+        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.gg), 0, 1)
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         filter!(:nonmissing_sum_skipmissing => >=(20), climate_panel)
 
@@ -406,14 +406,14 @@ module DellReplicate
                 climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
             end
         end
-        # for var in ["wtem", "wpre"]
-        #     for name in ["name1", "name2", "name3", "name4"]
-        #     println("Hi my name is $(var) and $(name)")
-        #     end
-        # end
-        println(mean(skipmissing(climate_panel[!,:wtem_initgdpxtile2])))
-        
-        
+        climate_panel = gen_year_vars(climate_panel)
+   
+        for var in [:wtem,:wpre]
+            transform!(groupby(climate_panel, :fips60_06), var => mean => Symbol(var, "countrymean"))
+            climate_panel[!,Symbol(var, "_withoutcountrymean")] .= climate_panel[!,var] .- climate_panel[!,Symbol(var, "countrymean")]
+            transform!(groupby(climate_panel, :year), Symbol(var, "_withoutcountrymean") => mean => Symbol(var, "temp", "_yr") )
+            climate_panel[!,Symbol(var, "_withoutcountryyr")] .= climate_panel[!,Symbol(var, "_withoutcountrymean")] .- climate_panel[!,Symbol(var, "temp", "_yr")]
+        end
         
     end
 
