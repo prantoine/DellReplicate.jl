@@ -415,6 +415,39 @@ module DellReplicate
             climate_panel[!,Symbol(var, "_withoutcountryyr")] .= climate_panel[!,Symbol(var, "_withoutcountrymean")] .- climate_panel[!,Symbol(var, "temp", "_yr")]
         end
         
+        #println(count(x -> isequal(x,true), climate_panel[!,:wtem] .> climate_panel[!, :wtemcountrymean])/size(climate_panel[!,:wtem])[1])
+        function neighborhood(t, x)
+            if abs(x) >= t 
+                return true
+            else
+                return false
+            end
+        end
+        Res = []
+        # for var in [:wtem, :wpre]
+        #     for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
+        #         println("The percentage of $var $t below/above countrymean is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountrymean")])/size(climate_panel[!,var])[1])")
+        #         println("The percentage of $var $t below/above countrymean without year fixed effect is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountryyr")])/size(climate_panel[!,var])[1])")
+        #     end
+        # end
+        
+        for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
+            
+                count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountrymean])/size(climate_panel[!,:wtem])[1]
+                count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountryyr])/size(climate_panel[!,:wtem])[1]
+                
+        end
+        println(Results)
+
+        # wpre = Any[]
+        # for t in [1, 2, 3, 4, 5, 6]
+            
+        #         a = count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountrymean])/size(climate_panel[!,:wpre])[1]
+        #         push!(wpre, a)
+        #         b = count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountryyr])/size(climate_panel[!,:wpre])[1]
+        #         push!(wpre, b)
+        # end
+        # println(wpre)
     end
 
         #figure2_visualise("climate_panel_csv.csv")                     
