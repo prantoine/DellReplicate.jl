@@ -8,6 +8,8 @@ module DellReplicate
     using BenchmarkTools
     using Plots
     using Logging
+    using PrettyTables
+    
 
     """
         gen_vars_fig1!(df::DataFrame)
@@ -17,7 +19,7 @@ module DellReplicate
     """
     function gen_vars_fig1!(df)
 
-        println(size(df))
+        
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
 
@@ -178,21 +180,28 @@ module DellReplicate
     
     end
 
+    function keep_20yrs_gdp(df::DataFrames.DataFrame)
+        
+        df[!, :nonmissing] .= ifelse.(ismissing.(df.g_lngdpwdi), 0, 1)
+        transform!(groupby(df, :fips60_06), :nonmissing => sum∘skipmissing)
+        filter!(:nonmissing_sum_skipmissing => >=(20), df)
+        return df
+
+    end
+
     """
-        gen_vars_fig2(df::DataFrames.DataFrame)
-    Generates all the variables necessary for figure 2.
+        gen_lag_vars(df::DataFrames.DataFrame)
+    Generates all the variables necessary for figure 2 and others.
     """
-    function gen_vars_fig2!(df::DataFrames.DataFrame)
+    function gen_lag_vars(df::DataFrames.DataFrame)
         
         lag_df = df[:, [:year, :fips60_06, :wtem, :wpre, :wtem50, :wpre50]]
 
         for var in [ "wtem", "wpre" ]
-            df[!, "$(var)Xlnrgdpl_t0"] .= df[:, var] .* df[:, :lnrgdpl_t0]
-            lag_df[!, "$(var)Xlnrgdpl_t0"] = df[:, "$(var)Xlnrgdpl_t0"]
+            lag_df[!, "$(var)Xlnrgdpl_t0"] .= df[:, var] .* df[:, :lnrgdpl_t0]
 
             for bin_var in [ "initagshare95xtile1", "initagshare95xtile2", "initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2"]
-                df[!, "$(var)_$(bin_var)"] .= df[:, var] .* df[:, bin_var]
-                lag_df[!, "$(var)_$(bin_var)"] = df[:, "$(var)_$(bin_var)"]
+                lag_df[!, "$(var)_$(bin_var)"] .= df[:, var] .* df[:, bin_var]
             end
 
         end
@@ -201,42 +210,43 @@ module DellReplicate
 
         for var in vars_to_lag
             transform!(groupby(lag_df, :fips60_06), var => lag => "L1$(var)") 
+            lag_df[!, Symbol(:fd,var)] .= lag_df[:, var] .- lag_df[:, "L1$(var)"]
             for n_lag in 2:10
                 transform!(groupby(lag_df, :fips60_06), "L$(n_lag-1)$(var)" => lag => "L$(n_lag)$(var)")
             end
         end
+        #we should be at line 137 in the do file here !
+
+        return outerjoin(df, lag_df, on=[:fips60_06, :year], makeunique=true)
+
     end
 
-    function figure2_visualise(df_name::String)
-
-        climate_panel = read_csv(df_name)
-        filter!(:year => <=(2003), climate_panel)
-
-        sort!(climate_panel, [:fips60_06, :year])
+    function gen_year_vars(df::DataFrames.DataFrame)
         
-        # Direct broadcast is faster
-        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
-        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
-        growth_var!(climate_panel, :lngdpwdi)
-        growth_var!(climate_panel, :lngdppwt)
+        numyears = maximum([ size(subfd)[1] for subfd in groupby(df, :fips60_06)] ) - 1
+        unique_years = [year for year in range(1,numyears+1)]
+        
+        region_vars = ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS"]
+        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initgdpxtile1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
 
-        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
-        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
-        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+        #dummies: 1 for each year
+        transform!(groupby(temp_df, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
 
-       # growth Lags for lnag lnind lngdpwdi lninvest 
-        transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
-
-        for var in [ :ag, :ind, :gdpwdi, :invest ]
-            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        for year in unique_years
+            if year != 54
+                for region in region_vars
+                    temp_df[!, Symbol(:RY, year, "X", region)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df[:, region]
+                end
+                temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initgdpxtile1
+            end
         end
 
-        # Drop if less than 20 years of GDP values
-        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g_lngdpwdi), 0, 1)
-        transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
-        climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
+        return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
-        # Create 3 copies to be merged
+    end
+
+    function gen_xtile_vars(climate_panel::DataFrames.DataFrame)
+
         temp1 = copy(climate_panel)
         filter!(:lnrgdpl_t0 => (x -> !ismissing.(x)), temp1)
         transform!(groupby(temp1, :fips60_06), eachindex => :countrows)
@@ -264,29 +274,58 @@ module DellReplicate
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
         merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
         merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
-        println(merged_2[1:200, [:fips60_06, :initwtem50bin, :initwtem50xtile1, :initwtem50xtile2]])
         climate_panel = merged_2
 
         temp3 = copy(climate_panel)
         filter!(:year => ==(1995), temp3)
         sort!(temp3, [:fips60_06, :year])
         temp3[!, :initagshare1995] .= log.(temp3.gdpSHAREAG) / size(temp3)[1]
-        println(temp3[:, [:year, :fips60_06, :initagshare1995]])
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
         temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
-        println(temp3[:, [:year, :fips60_06, :gdpSHAREAG, :initagshare1995]])
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
         merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
         merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
         merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
-        println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
-        climate_panel = merged_3
+         
+        return merged_3
+    end
 
-        gen_vars_fig2!(climate_panel)
+    function figure2_visualise(df_name::String)
+
+        climate_panel = read_csv(df_name)
+        filter!(:year => <=(2003), climate_panel)
+
+        sort!(climate_panel, [:fips60_06, :year])
+        
+        # Direct broadcast is faster
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
+        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
+        growth_var!(climate_panel, :lngdpwdi)
+        growth_var!(climate_panel, :lngdppwt)
+
+        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
+        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
+        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+
+       # growth Lags for lnag lnind lngdpwdi lninvest 
+        transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
+
+        for var in [ :ag, :ind, :gdpwdi, :invest ]
+            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        end
+
+        # Drop if less than 20 years of GDP values
+        climate_panel = keep_20yrs_gdp(climate_panel)
+        #climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
+        climate_panel = gen_xtile_vars(climate_panel)
+        climate_panel = gen_lag_vars(climate_panel)
+        climate_panel = gen_year_vars(climate_panel)
+        
+        #a few duplicates are created here.
 
         #CODES: 999 IF MISSING BIN
 
@@ -295,9 +334,9 @@ module DellReplicate
     #figure2_visualise("climate_panel_csv.csv")
 
     """
-        function make_table_1(raw_df_name::String)
+        make_table_1(raw_df_name::String)
     
-        Create summary statistics of the Data.
+    Create summary statistics of the Data.
 
     """
     function make_table1(raw_df_name::String)
@@ -315,7 +354,7 @@ module DellReplicate
         transform!(groupby(climate_panel, :fips60_06), :lngdpwdi => lag => :temp_lag_gdp_WDI,
                                                           :lngdppwt => lag => :temp_lag_gdp_PWT)
 
-        climate_panel[!, :g] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
+        climate_panel[!, :gg] .= ( climate_panel.lngdpwdi .- climate_panel.temp_lag_gdp_WDI ) .* 100
         climate_panel[!, :gpwt] .= ( climate_panel.lngdppwt .- climate_panel.temp_lag_gdp_PWT ) .* 100
         select!(climate_panel, Not(:temp_lag_gdp_WDI))
         select!(climate_panel , Not(:temp_lag_gdp_PWT))
@@ -329,7 +368,7 @@ module DellReplicate
         end
 
         # Drop if less than 20 years of GDP values
-        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.g), 0, 1)
+        climate_panel[!, :nonmissing] .= ifelse.(ismissing.(climate_panel.gg), 0, 1)
         transform!(groupby(climate_panel, :fips60_06), :nonmissing => sum∘skipmissing)
         filter!(:nonmissing_sum_skipmissing => >=(20), climate_panel)
 
@@ -346,9 +385,75 @@ module DellReplicate
             filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
         end
         
+        # temp1 = copy(climate_panel)
+        # temp1 = dropmissing(temp1, :lnrgdpl_t0)
+        # sort!(temp1, :fips60_06)
+        # temp1 = combine(first, groupby(temp1, :fips60_06))
+        # temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
+        # #CAREFUL ABOUT THE SORTING
+        # sort!(temp1, :initgdpbin)
+        # temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        # select!(temp1, [:fips60_06, :initgdpbin])
+        # println(temp1[!,[:fips60_06, :initgdpbin]])
+        climate_panel = gen_xtile_vars(climate_panel)
+        
+        for var in ["wtem", "wpre"]
+            climate_panel[!, "$(var)Xlnrgdpl_t0"] .= climate_panel[!, var] .* climate_panel[!, "lnrgdpl_t0"]
+            for name in ["initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2", "initagshare95xtile1", "initagshare95xtile2"]
+                climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
+            end
+        end
+        climate_panel = gen_year_vars(climate_panel)
+   
+        for var in [:wtem,:wpre]
+            transform!(groupby(climate_panel, :fips60_06), var => mean => Symbol(var, "countrymean"))
+            climate_panel[!,Symbol(var, "_withoutcountrymean")] .= climate_panel[!,var] .- climate_panel[!,Symbol(var, "countrymean")]
+            transform!(groupby(climate_panel, :year), Symbol(var, "_withoutcountrymean") => mean => Symbol(var, "temp", "_yr") )
+            climate_panel[!,Symbol(var, "_withoutcountryyr")] .= climate_panel[!,Symbol(var, "_withoutcountrymean")] .- climate_panel[!,Symbol(var, "temp", "_yr")]
+        end
+        
+        #println(count(x -> isequal(x,true), climate_panel[!,:wtem] .> climate_panel[!, :wtemcountrymean])/size(climate_panel[!,:wtem])[1])
+        function neighborhood(t, x)
+            if abs(x) >= t 
+                return true
+            else
+                return false
+            end
+        end
+        Res = []
+        # for var in [:wtem, :wpre]
+        #     for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
+        #         println("The percentage of $var $t below/above countrymean is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountrymean")])/size(climate_panel[!,var])[1])")
+        #         println("The percentage of $var $t below/above countrymean without year fixed effect is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountryyr")])/size(climate_panel[!,var])[1])")
+        #     end
+        # end
+        
+        a = Float64[]
+        b = Float64[]
+        for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
+            
+                push!(a,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountrymean])/size(climate_panel[!,:wtem])[1], digits = 3))
+                push!(b,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountryyr])/size(climate_panel[!,:wtem])[1], digits = 3))
+        end
+        # println(a, b)
+        table1 = DataFrame(Statistic= ["Raw Data","Without year FE"], Quarter = [a[1], b[1]], Half = [a[2], b[2]], ThreeQuarter = [a[3], b[3]], One = [a[4], b[4]], One_and_quarter = [a[5],b[5]], One_and_half=[a[6], b[6]])
+        pretty_table(table1)
+
+        c = Float64[]
+        d = Float64[]
+        for t in [1, 2, 3, 4, 5, 6]
+            
+                push!(c, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountrymean])/size(climate_panel[!,:wpre])[1], digits = 3))
+                push!(d, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountryyr])/size(climate_panel[!,:wpre])[1], digits = 3))
+        end
+        #println(c, d)
+        table2 = DataFrame(Statistic= ["Raw Data","Without year FE"], One = [c[1], d[1]], Two = [c[2], d[2]], Three = [c[3], d[3]], Four = [c[4], d[4]], Five = [c[5],d[5]], Six=[c[6], d[6]])
+        pretty_table(table2)
     end
-    make_table1("climate_panel_csv.csv")
-    #figure2_visualise("climate_panel_csv.csv")
+
+        #figure2_visualise("climate_panel_csv.csv")                     
+        make_table1("climate_panel_csv.csv")
+
 end
 
 
