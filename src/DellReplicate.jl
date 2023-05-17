@@ -8,6 +8,7 @@ module DellReplicate
     using BenchmarkTools
     using Plots
     using Logging
+    using PrettyTables
     
 
     """
@@ -18,7 +19,7 @@ module DellReplicate
     """
     function gen_vars_fig1!(df)
 
-        println(size(df))
+        
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
 
@@ -273,26 +274,22 @@ module DellReplicate
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
         merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
         merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
-        println(merged_2[1:200, [:fips60_06, :initwtem50bin, :initwtem50xtile1, :initwtem50xtile2]])
         climate_panel = merged_2
 
         temp3 = copy(climate_panel)
         filter!(:year => ==(1995), temp3)
         sort!(temp3, [:fips60_06, :year])
         temp3[!, :initagshare1995] .= log.(temp3.gdpSHAREAG) / size(temp3)[1]
-        println(temp3[:, [:year, :fips60_06, :initagshare1995]])
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
         temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
-        println(temp3[:, [:year, :fips60_06, :gdpSHAREAG, :initagshare1995]])
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
         merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
         merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
         merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
-        println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
          
         return merged_3
     end
@@ -327,7 +324,7 @@ module DellReplicate
         climate_panel = gen_xtile_vars(climate_panel)
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
-        println(size(climate_panel))
+        
         #a few duplicates are created here.
 
         #CODES: 999 IF MISSING BIN
@@ -431,23 +428,27 @@ module DellReplicate
         #     end
         # end
         
+        a = Float64[]
+        b = Float64[]
         for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
             
-                count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountrymean])/size(climate_panel[!,:wtem])[1]
-                count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountryyr])/size(climate_panel[!,:wtem])[1]
-                
+                push!(a,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountrymean])/size(climate_panel[!,:wtem])[1], digits = 3))
+                push!(b,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountryyr])/size(climate_panel[!,:wtem])[1], digits = 3))
         end
-        println(Results)
+        # println(a, b)
+        table1 = DataFrame(Statistic= ["Raw Data","Without year FE"], Quarter = [a[1], b[1]], Half = [a[2], b[2]], ThreeQuarter = [a[3], b[3]], One = [a[4], b[4]], One_and_quarter = [a[5],b[5]], One_and_half=[a[6], b[6]])
+        pretty_table(table1)
 
-        # wpre = Any[]
-        # for t in [1, 2, 3, 4, 5, 6]
+        c = Float64[]
+        d = Float64[]
+        for t in [1, 2, 3, 4, 5, 6]
             
-        #         a = count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountrymean])/size(climate_panel[!,:wpre])[1]
-        #         push!(wpre, a)
-        #         b = count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountryyr])/size(climate_panel[!,:wpre])[1]
-        #         push!(wpre, b)
-        # end
-        # println(wpre)
+                push!(c, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountrymean])/size(climate_panel[!,:wpre])[1], digits = 3))
+                push!(d, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountryyr])/size(climate_panel[!,:wpre])[1], digits = 3))
+        end
+        #println(c, d)
+        table2 = DataFrame(Statistic= ["Raw Data","Without year FE"], One = [c[1], d[1]], Two = [c[2], d[2]], Three = [c[3], d[3]], Four = [c[4], d[4]], Five = [c[5],d[5]], Six=[c[6], d[6]])
+        pretty_table(table2)
     end
 
         #figure2_visualise("climate_panel_csv.csv")                     
