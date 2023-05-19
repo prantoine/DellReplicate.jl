@@ -20,7 +20,7 @@ module DellReplicate
 
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
-
+        
         for var in [:wtem, :wpre]
             
             df = transform(groupby(df, :parent), var => maximum => "$(var)max")
@@ -330,10 +330,17 @@ module DellReplicate
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
 
-        println(size(climate_panel))
+        println(names(climate_panel))
         #a few duplicates are created here.
 
         #CODES: 999 IF MISSING BIN
+        #gen mean temps reminder g = g_lngdpwdi
+        temp_df = groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "gag", "gind", "ginvest"]), :year => ByRow(>=(1951)), :year => ByRow(<=(1960))), :fips60_06)
+        temp_df2 = combine(temp_df, [name for name in names(temp_df) if name ∉ ["year", "fips60_06"]] .=> mean .=> Symbol.(:temp,"50s", [name for name in names(temp_df) if name ∉ ["year", "fips60_06"]]))
+
+        println(temp_df2[:, ["fips60_06", "temp50swtem", "temp50swpre"]])
+
+
 
     end
 
