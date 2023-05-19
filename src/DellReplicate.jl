@@ -451,6 +451,8 @@ module DellReplicate
         pretty_table(table2)
     end
 
+    function maketable2(raw_df_name::String)
+    end
         #figure2_visualise("climate_panel_csv.csv")                     
         make_table1("climate_panel_csv.csv")
 
