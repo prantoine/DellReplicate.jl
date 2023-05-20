@@ -9,6 +9,8 @@ module DellReplicate
     using Plots
     using Logging
     using PrettyTables
+    using StatsModels
+    using GLM
     
 
     """
@@ -190,6 +192,15 @@ module DellReplicate
     end
 
     """
+        filter_transform!(df::DataFrames.DataFrame, pred, args)
+    Transforms the data on a filtered subset using a predicate function (a function that returns true or false).
+    """
+    function filter_transform!(df::DataFrames.DataFrame, pred, args)
+        fdf = filter(pred, df, view = true)
+        fdf .= transform(copy(fdf), args)
+    end
+
+    """
         gen_lag_vars(df::DataFrames.DataFrame)
     Generates all the variables necessary for figure 2 and others.
     """
@@ -345,7 +356,7 @@ module DellReplicate
 
         filter!(:year => <=(2003), climate_panel)
 
-        transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp1)
+        
 
         sort!(climate_panel, [:fips60_06, :year])
 
@@ -374,10 +385,6 @@ module DellReplicate
 
         #Make sure all subcomponents are non-missing in a given year
         climate_panel[!, :misdum] .= 0
-        function filter_transform!(df, pred, args)
-            fdf = filter(pred, df, view = true)
-            fdf .= transform(copy(fdf), args)
-        end
         for var in [:g_lnag, :g_lnind]
             filter_transform!(climate_panel,var => ismissing, :misdum => (b -> (b=1)) => :misdum)
         end
@@ -403,8 +410,8 @@ module DellReplicate
                 climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
             end
         end
+        
         climate_panel = gen_year_vars(climate_panel)
-   
         for var in [:wtem,:wpre]
             transform!(groupby(climate_panel, :fips60_06), var => mean => Symbol(var, "countrymean"))
             climate_panel[!,Symbol(var, "_withoutcountrymean")] .= climate_panel[!,var] .- climate_panel[!,Symbol(var, "countrymean")]
@@ -451,10 +458,75 @@ module DellReplicate
         pretty_table(table2)
     end
 
-    function maketable2(raw_df_name::String)
+    function make_table2(raw_df_name::String)
+        climate_panel = read_csv(raw_df_name)
+
+        filter!(:year => <=(2003), climate_panel)
+
+        transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp)
+        println(climate_panel[1:20,:lgdp])
+        sort!(climate_panel, [:fips60_06, :year])
+
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
+        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
+        growth_var!(climate_panel, :lngdpwdi)
+
+        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
+        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
+        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+
+        #Compute the growth rate for each value 
+        for var in [:lnag, :lnind, :lngdpwdi, :lninvest]
+            growth_var!(climate_panel, var)        
+        end
+        
+        
+        climate_panel = keep_20yrs_gdp(climate_panel)
+
+        #Make sure all subcomponents are non-missing in a given year
+        climate_panel[!, :misdum] .= 0
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,var => ismissing, :misdum => (b -> (b=1)) => :misdum)
+        end
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
+        end
+        
+
+        climate_panel = gen_xtile_vars(climate_panel)
+
+        climate_panel = gen_lag_vars(climate_panel)
+
+        climate_panel = gen_year_vars(climate_panel)
+
+        climate_panel[!, :region] .= ""
+        for var in ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS" ]
+            filter_transform!(climate_panel, Symbol(var) => ==(1), :region => (b -> (b = var)) => :region )
+        end
+        
+        climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
+
+        #dummies: 1 for each country
+        
+        countries = unique(climate_panel[:, :fips60_06])
+        
+        transform!(groupby(climate_panel, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
+        
+        RY_vars = names(climate_panel[:, r"RY"])
+        CNTRY_vars = names(climate_panel[:, r"cntry_"])
+        
+        
+        formula = Term(:g_lngdpwdi) ~ Term(:wtem) + sum(term.(Symbol.(RY_vars))) + sum(term.(Symbol.(CNTRY_vars)))
+        
+        linear_regression = lm(formula, climate_panel)
+
+        println(nobs(linear_regression))
+        
+
     end
+
         #figure2_visualise("climate_panel_csv.csv")                     
-        make_table1("climate_panel_csv.csv")
+        make_table2("climate_panel_csv.csv")
 
 end
 
