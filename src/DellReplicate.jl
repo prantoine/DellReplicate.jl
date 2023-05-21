@@ -11,6 +11,7 @@ module DellReplicate
     using PrettyTables
     using StatsModels
     using GLM
+    using LinearAlgebra
     
 
     """
@@ -251,6 +252,7 @@ module DellReplicate
                 temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initgdpxtile1
             end
         end
+        
 
         return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
@@ -494,9 +496,7 @@ module DellReplicate
         
 
         climate_panel = gen_xtile_vars(climate_panel)
-
         climate_panel = gen_lag_vars(climate_panel)
-
         climate_panel = gen_year_vars(climate_panel)
 
         climate_panel[!, :region] .= ""
@@ -514,13 +514,42 @@ module DellReplicate
         
         RY_vars = names(climate_panel[:, r"RY"])
         CNTRY_vars = names(climate_panel[:, r"cntry_"])
-        
-        
+        test = select(climate_panel, vcat(["wtem"],["g_lngdpwdi"],RY_vars, CNTRY_vars))
+        dropmissing!(test)
+
+        to_drop = ["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"]
+        test = select(test, vcat([var for var in names(test) if var ∉ to_drop]))
+        test[!, :const] .= 1
+
+        X = Matrix(select(test, vcat([var for var in names(test) if var != "g_lngdpwdi"])))
+        Y = Vector(test.g_lngdpwdi) 
+        beta_coeffs_ols = inv(X'*X)*X'*Y
+        coeffs_dict = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test) if var != "g_lngdpwdi"]), beta_coeffs_ols))
+        println(coeffs_dict["wtem"])
+
+        climate_panel2 = read_csv("climate_panel_b4reg.csv")
+        transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
+        test2 = select(climate_panel2, vcat(["wtem", "g"], RY_vars, CNTRY_vars))
+        dropmissing!(test2)
+        test2 = select(test2, vcat([var for var in names(test2) if var ∉ to_drop]))
+        test2[!, :const] .= 1
+
+        X2 = Matrix(select(test2, vcat([var for var in names(test2) if var != "g"])))
+        Y2 = Vector(test2.g)
+        coeffs_dict2 = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test2) if var != "g"]), inv(X2'*X2)*X2'*Y2))
+        println(coeffs_dict2["wtem"])
+        #println(beta_coeffs_ols)
+
+        #Y = Vector()
+
+        #beta = (transpose(X)*X)^(-1)*transpose(X)*Y;
+        #test2 = X'*skipmissing(Y)
+
+
         formula = Term(:g_lngdpwdi) ~ Term(:wtem) + sum(term.(Symbol.(RY_vars))) + sum(term.(Symbol.(CNTRY_vars)))
         
-        linear_regression = lm(formula, climate_panel)
+        #linear_regression = lm(formula, climate_panel)
 
-        println(nobs(linear_regression))
         
 
     end
