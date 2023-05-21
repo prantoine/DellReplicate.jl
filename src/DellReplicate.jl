@@ -233,7 +233,7 @@ module DellReplicate
 
         #dummies: 1 for each year
         transform!(groupby(temp_df, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
-
+        
         for year in unique_years
             if year != 54
                 for region in region_vars
@@ -243,6 +243,8 @@ module DellReplicate
             end
         end
 
+        println(temp_df[(temp_df[!, :fips60_06] .== "KS"), [:fips60_06, :year, :RYPX1, :RYPX7]])
+        println(size(temp_df))
         return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
     end
@@ -276,26 +278,22 @@ module DellReplicate
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
         merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
         merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
-        println(merged_2[1:200, [:fips60_06, :initwtem50bin, :initwtem50xtile1, :initwtem50xtile2]])
         climate_panel = merged_2
 
         temp3 = copy(climate_panel)
         filter!(:year => ==(1995), temp3)
         sort!(temp3, [:fips60_06, :year])
         temp3[!, :initagshare1995] .= log.(temp3.gdpSHAREAG) / size(temp3)[1]
-        println(temp3[:, [:year, :fips60_06, :initagshare1995]])
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
         temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
-        println(temp3[:, [:year, :fips60_06, :gdpSHAREAG, :initagshare1995]])
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
         merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
         merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
         merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
-        println(merged_3[1:200, [:fips60_06, :initagshare95xtile1, :initagshare95xtile2]])
          
         return merged_3
     end
@@ -320,8 +318,9 @@ module DellReplicate
        # growth Lags for lnag lnind lngdpwdi lninvest 
         transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
 
-        for var in [ :ag, :ind, :gdpwdi, :invest ]
-            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        for var in [ :lnag, :lnind, :lngdpwdi, :lninvest ]
+            #climate_panel[!, "g_$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+            growth_var!(climate_panel, var)
         end
 
         # Drop if less than 20 years of GDP values
@@ -329,19 +328,75 @@ module DellReplicate
         climate_panel = gen_xtile_vars(climate_panel)
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
-
-        println(names(climate_panel))
         #a few duplicates are created here.
 
         #CODES: 999 IF MISSING BIN
         #gen mean temps reminder g = g_lngdpwdi
-        temp_df = groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "gag", "gind", "ginvest"]), :year => ByRow(>=(1951)), :year => ByRow(<=(1960))), :fips60_06)
-        temp_df2 = combine(temp_df, [name for name in names(temp_df) if name ∉ ["year", "fips60_06"]] .=> mean .=> Symbol.(:temp,"50s", [name for name in names(temp_df) if name ∉ ["year", "fips60_06"]]))
+        
+        temp_df = Dict()
 
-        println(temp_df2[:, ["fips60_06", "temp50swtem", "temp50swpre"]])
+        for (period, year) in Dict("50s" => [1951, 1960],
+                             "60s" => [1961, 1970],
+                             "70s" => [1971, 1980],
+                             "80s" => [1981, 1990],
+                             "90s" => [1991, 2000],
+                             "00s" => [1994, 2003],
+                             "84s" => [1984, 1993],
+                             "64s" => [1964, 1973],
+                             "7085" => [1970, 1985],
+                             "8600" => [1986, 2000],
+                             "7086" => [1970, 1986],
+                             "8703" => [1987, 2003],
+                             "7087" => [1970, 1987],
+                             "8803" => [1988, 2003]
+                            )
 
+        temp_df[period] =   combine(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06),
+                            [name for name in names(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06))
+                            if name ∉ ["year", "fips60_06"]] .=> mean∘skipmissing .=> Symbol.(:temp, period,
+                            [name for name in names(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06))
+                            if name ∉ ["year", "fips60_06"]])) 
 
+        # In the dofile, the second `mean` command is simply used to fill all missing values with the just-computed value.
+        # Here we will perform a many to many merge, so values will naturally expand. Therefore we do not need to do anything else.
+        
+        end
 
+        for (k,v) in temp_df
+            climate_panel = outerjoin(climate_panel, v, on = :fips60_06)
+        end
+
+        #Non working version, although it looks cooler
+        #@. climate_panel = outerjoin.(climate_panel, values(temp_df), on = :fips60_06)
+
+            
+            for var in ["wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]
+            for (period, year) in Dict("00" => ["50s", "60s", "64s", "70s", "80s", "90s"],
+                                    "90" => ["50s", "60s", "70s", "80s"],
+                                    "84" => ["50s", "60s", "70s", "80s", "90s"]
+                                    ) 
+
+                for y in year
+                    climate_panel[!, Symbol(:change, period , y, var)] .= climate_panel[:, Symbol(:temp, y, var)] .- climate_panel[:, Symbol(:temp, period, "s", var)]
+                end
+
+            end
+
+            #for var wtem wpre g gpwt gag gind ginvest : g changeS1X = mean8600X - mean7085X 
+             #   for var wtem wpre g gpwt gag gind ginvest : g changeS2X = mean8703X - mean7086X 	
+              #  for var wtem wpre g gpwt gag gind ginvest : g changeS3X = mean8803X - mean7087X 
+              climate_panel[!, Symbol(:changeS1, var)] .= climate_panel[:, Symbol(:temp8600, var)] .- climate_panel[:, Symbol(:temp7085, var)]
+              climate_panel[!, Symbol(:changeS2, var)] .= climate_panel[:, Symbol(:temp8703, var)] .- climate_panel[:, Symbol(:temp7086, var)]
+              climate_panel[!, Symbol(:changeS3, var)] .= climate_panel[:, Symbol(:temp8803, var)] .- climate_panel[:, Symbol(:temp7087, var)]
+
+            end
+
+            for var in [ name for name in names(climate_panel) if occursin("change", name) ]
+            #println(var)
+            end
+
+    #println(climate_panel[1:200, [:fips60_06, :year, :changeS1wtem, :changeS2wtem, :changeS3wtem]])
+    #println(names(climate_panel))
     end
 
     #figure2_visualise("climate_panel_csv.csv")
@@ -407,7 +462,6 @@ module DellReplicate
         sort!(temp1, :initgdpbin)
         temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
         select!(temp1, [:fips60_06, :initgdpbin])
-        println(temp1[!,[:fips60_06, :initgdpbin]])
     end
 
         figure2_visualise("climate_panel_csv.csv")                     
