@@ -212,7 +212,7 @@ module DellReplicate
         for var in [ "wtem", "wpre" ]
             lag_df[!, "$(var)Xlnrgdpl_t0"] .= df[:, var] .* df[:, :lnrgdpl_t0]
 
-            for bin_var in [ "initagshare95xtile1", "initagshare95xtile2", "initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2"]
+            for bin_var in [ "initxtileagshare1", "initxtileagshare2", "initxtilegdp1", "initxtilegdp2", "initxtilewtem1", "initxtilewtem2"]
                 lag_df[!, "$(var)_$(bin_var)"] .= df[:, var] .* df[:, bin_var]
             end
 
@@ -239,7 +239,7 @@ module DellReplicate
         unique_years = [year for year in range(1,numyears+1)]
         
         region_vars = ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS"]
-        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initgdpxtile1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
+        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initxtilegdp1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
 
         #dummies: 1 for each year
         transform!(groupby(temp_df, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
@@ -249,7 +249,7 @@ module DellReplicate
                 for region in region_vars
                     temp_df[!, Symbol(:RY, year, "X", region)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df[:, region]
                 end
-                temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initgdpxtile1
+                temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initxtilegdp1
             end
         end
         
@@ -267,13 +267,12 @@ module DellReplicate
         temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
         # CAREFUL ABOUT THE SORTING
         sort!(temp1, :initgdpbin)
-        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
-        println(temp1[:, [:fips60_06, :initgdpbin]])
+        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .<= temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
         select!(temp1, [:fips60_06, :initgdpbin])
         merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
         merged_1[:, :initgdpbin] .= ifelse.(ismissing.(merged_1.initgdpbin), 999, merged_1.initgdpbin)
-        merged_1[!, :initgdpxtile1] .= ifelse.(merged_1.initgdpbin .== 1, 1, ifelse.(merged_1.initgdpbin .== 2, 0, missing))
-        merged_1[!, :initgdpxtile2] .= ifelse.(merged_1.initgdpbin .== 2, 1, ifelse.(merged_1.initgdpbin .== 1, 0, missing))
+        merged_1[!, :initxtilegdp1] .= ifelse.(merged_1.initgdpbin .== 1, 1, ifelse.(merged_1.initgdpbin .== 2, 0, missing))
+        merged_1[!, :initxtilegdp2] .= ifelse.(merged_1.initgdpbin .== 2, 1, ifelse.(merged_1.initgdpbin .== 1, 0, missing))
         climate_panel = merged_1
 
         temp2 = copy(climate_panel)
@@ -282,12 +281,12 @@ module DellReplicate
         filter!(:countrows => ==(1), temp2)
         temp2[!, :initwtem50bin] .= temp2.wtem50 / size(temp2)[1]
         sort!(temp2, :initwtem50bin)
-        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .< temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
+        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .<= temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
         select!(temp2, [:fips60_06, :initwtem50bin])
         merged_2 = outerjoin(climate_panel, temp2, on=[:fips60_06])
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
-        merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
-        merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
+        merged_2[!, :initxtilewtem1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
+        merged_2[!, :initxtilewtem2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
         climate_panel = merged_2
 
         temp3 = copy(climate_panel)
@@ -297,13 +296,13 @@ module DellReplicate
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
-        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
+        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .<= temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
         merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
-        merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
-        merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
+        merged_3[!, :initxtileagshare1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
+        merged_3[!, :initxtileagshare2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
          
         return merged_3
     end
@@ -409,7 +408,7 @@ module DellReplicate
         
         for var in ["wtem", "wpre"]
             climate_panel[!, "$(var)Xlnrgdpl_t0"] .= climate_panel[!, var] .* climate_panel[!, "lnrgdpl_t0"]
-            for name in ["initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2", "initagshare95xtile1", "initagshare95xtile2"]
+            for name in ["initxtilegdp1", "initxtilegdp2", "initxtilewtem1", "initxtilewtem2", "initxtileagshare1", "initxtileagshare2"]
                 climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
             end
         end
@@ -483,7 +482,6 @@ module DellReplicate
             growth_var!(climate_panel, var)        
         end
         
-        
         climate_panel = keep_20yrs_gdp(climate_panel)
 
         #Make sure all subcomponents are non-missing in a given year
@@ -507,58 +505,63 @@ module DellReplicate
         climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
 
         #dummies: 1 for each country
-        
         countries = unique(climate_panel[:, :fips60_06])
-        
-        transform!(groupby(climate_panel, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
-        
-        RY_vars = names(climate_panel[:, r"RY"])
-        CNTRY_vars = names(climate_panel[:, r"cntry_"])
-        test = select(climate_panel, vcat(["wtem"],["g_lngdpwdi"],RY_vars, CNTRY_vars))
-        dropmissing!(test)
-
-        to_drop = ["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"]
-        test = select(test, vcat([var for var in names(test) if var ∉ to_drop]))
-        test[!, :const] .= 1
-
-        X = Matrix(select(test, vcat([var for var in names(test) if var != "g_lngdpwdi"])))
-        Y = Vector(test.g_lngdpwdi) 
-        beta_coeffs_ols = inv(X'*X)*X'*Y
-        coeffs_dict = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test) if var != "g_lngdpwdi"]), beta_coeffs_ols))
+        transform!(groupby(climate_panel, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries)) 
 
         #climate_panel_b4reg is the state of the data in stata right before running the first regression
         climate_panel2 = read_csv("climate_panel_b4reg.csv")
         transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
-        test2 = select(climate_panel2, vcat(["wtem", "g"], RY_vars, CNTRY_vars))
-        dropmissing!(test2)
-        test2 = select(test2, vcat([var for var in names(test2) if var ∉ to_drop]))
-        test2[!, :const] .= 1
 
-        X2 = Matrix(select(test2, vcat([var for var in names(test2) if var != "g"])))
-        Y2 = Vector(test2.g)
-        coeffs_dict2 = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test2) if var != "g"]), inv(X2'*X2)*X2'*Y2))
+        #first column
+        check_coeffs_table2(climate_panel, climate_panel2, [])
 
-        for (dataset, info) in Dict("Julia" => ["climate_panel.csv", coeffs_dict],
-                                        "Stata" => ["climate_panel_b4reg.csv", coeffs_dict2])
-        for var in ["wtem", "const"]
-        println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
-        end
-        end
-        #println(beta_coeffs_ols)
+        #second column
+        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1"])
 
-        #Y = Vector()
+        #third column
+        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
 
-        #beta = (transpose(X)*X)^(-1)*transpose(X)*Y;
-        #test2 = X'*skipmissing(Y)
+        #fourth column
+        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
 
+        #fifth column
+        #check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
+    end
 
-        formula = Term(:g_lngdpwdi) ~ Term(:wtem) + sum(term.(Symbol.(RY_vars))) + sum(term.(Symbol.(CNTRY_vars)))
+    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame, other_regressors)
+
+        RY_vars = names(df_julia[:, r"RY"])
+        CNTRY_vars = names(df_julia[:, r"cntry_"])
+        all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi"],RY_vars, CNTRY_vars, other_regressors))
+        dropmissing!(all_varsJ)
         
-        #linear_regression = lm(formula, climate_panel)
+        to_drop = ["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"]
+        all_vars_nocollinearJ = select(all_varsJ, vcat([var for var in names(all_varsJ) if var ∉ to_drop]))
+        all_vars_nocollinearJ[!, :const] .= 1
 
-        
+        XJ = Matrix(select(all_vars_nocollinearJ, vcat([var for var in names(all_vars_nocollinearJ) if var != "g_lngdpwdi"])))
+        YJ = Vector(all_vars_nocollinearJ.g_lngdpwdi) 
+        coeffs_dictJ = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(all_vars_nocollinearJ) if var != "g_lngdpwdi"]), inv(XJ'*XJ)*XJ'*YJ))
+
+        all_varsS = select(df_stata, vcat(["wtem", "g"], RY_vars, CNTRY_vars, other_regressors))
+        dropmissing!(all_varsS)
+        all_vars_nocollinearS = select(all_varsS, vcat([var for var in names(all_varsS) if var ∉ to_drop]))
+        all_vars_nocollinearS[!, :const] .= 1
+
+        XS = Matrix(select(all_vars_nocollinearS, vcat([var for var in names(all_vars_nocollinearS) if var != "g"])))
+        YS = Vector(all_vars_nocollinearS.g)
+        coeffs_dictS = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(all_vars_nocollinearS) if var != "g"]), inv(XS'*XS)*XS'*YS))
+
+        for (dataset, info) in Dict("Julia" => ["climate_panel.csv", coeffs_dictJ],
+                                        "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
+            for var in ["wtem", "const"]
+                println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
+            end
+        end
+        println("\n")
 
     end
+
 
         #figure2_visualise("climate_panel_csv.csv")                     
         make_table2("climate_panel_csv.csv")
