@@ -268,6 +268,7 @@ module DellReplicate
         # CAREFUL ABOUT THE SORTING
         sort!(temp1, :initgdpbin)
         temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        println(temp1[:, [:fips60_06, :initgdpbin]])
         select!(temp1, [:fips60_06, :initgdpbin])
         merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
         merged_1[:, :initgdpbin] .= ifelse.(ismissing.(merged_1.initgdpbin), 999, merged_1.initgdpbin)
@@ -493,7 +494,6 @@ module DellReplicate
         for var in [:g_lnag, :g_lnind]
             filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
         end
-        
 
         climate_panel = gen_xtile_vars(climate_panel)
         climate_panel = gen_lag_vars(climate_panel)
@@ -525,8 +525,8 @@ module DellReplicate
         Y = Vector(test.g_lngdpwdi) 
         beta_coeffs_ols = inv(X'*X)*X'*Y
         coeffs_dict = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test) if var != "g_lngdpwdi"]), beta_coeffs_ols))
-        println(coeffs_dict["wtem"])
 
+        #climate_panel_b4reg is the state of the data in stata right before running the first regression
         climate_panel2 = read_csv("climate_panel_b4reg.csv")
         transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
         test2 = select(climate_panel2, vcat(["wtem", "g"], RY_vars, CNTRY_vars))
@@ -537,7 +537,13 @@ module DellReplicate
         X2 = Matrix(select(test2, vcat([var for var in names(test2) if var != "g"])))
         Y2 = Vector(test2.g)
         coeffs_dict2 = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(test2) if var != "g"]), inv(X2'*X2)*X2'*Y2))
-        println(coeffs_dict2["wtem"])
+
+        for (dataset, info) in Dict("Julia" => ["climate_panel.csv", coeffs_dict],
+                                        "Stata" => ["climate_panel_b4reg.csv", coeffs_dict2])
+        for var in ["wtem", "const"]
+        println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
+        end
+        end
         #println(beta_coeffs_ols)
 
         #Y = Vector()
