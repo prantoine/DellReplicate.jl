@@ -513,29 +513,30 @@ module DellReplicate
         transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
 
         #first column
-        check_coeffs_table2(climate_panel, climate_panel2, [])
+        check_coeffs_table2(climate_panel, climate_panel2, other_regressors= [])
 
         #second column
-        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1"])
+        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1"])
 
         #third column
-        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
+        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
 
         #fourth column
-        check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
+        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
 
-        #fifth column
-        #check_coeffs_table2(climate_panel, climate_panel2, ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
+        println(names(climate_panel[:, r"cntry_"]))
+        #fifth column (to drop: country BF)
+        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"], add_to_drop = ["cntry_BF", "cntry_BM", "cntry_BP", "cntry_CY", "cntry_IS", "cntry_LY", "cntry_MG", "cntry_NSA", "cntry_PP", "cntry_SP", "cntry_SO", "cntry_SU", ""])
     end
 
-    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame, other_regressors)
+    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors=other_regressors, add_to_drop=[])
 
         RY_vars = names(df_julia[:, r"RY"])
         CNTRY_vars = names(df_julia[:, r"cntry_"])
         all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi"],RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsJ)
         
-        to_drop = ["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"]
+        to_drop = vcat(["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"], add_to_drop)
         all_vars_nocollinearJ = select(all_varsJ, vcat([var for var in names(all_varsJ) if var ∉ to_drop]))
         all_vars_nocollinearJ[!, :const] .= 1
 
