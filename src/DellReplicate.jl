@@ -513,56 +513,97 @@ module DellReplicate
         transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
 
         #first column
-        check_coeffs_table2(climate_panel, climate_panel2, other_regressors= [])
+        col1 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors= [])
 
         #second column
-        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1"])
+        col2 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1"])
 
         #third column
-        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
+        col3 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
 
         #fourth column
-        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
+        col4 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
 
-        println(names(climate_panel[:, r"cntry_"]))
         #fifth column (to drop: country BF)
-        check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"], add_to_drop = ["cntry_BF", "cntry_BM", "cntry_BP", "cntry_CY", "cntry_IS", "cntry_LY", "cntry_MG", "cntry_NSA", "cntry_PP", "cntry_SP", "cntry_SO", "cntry_SU", ""])
+        col5 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
+        println("Coeff for wpre is $(col5["julia"]["wtem_initxtilegdp1"]) for julia and $(col5["stata"]["wtem_initxtilegdp1"]) for stata")
     end
 
-    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors=other_regressors, add_to_drop=[])
+
+    """
+        qr_method(X::Matrix; columns::Dict)
+    Returns a new matrix of regressors free of collinearity issues (i.e. full rank matrix) using the QR method as described by Engler (1997).
+    Also returns a dictionnary with the name of the regressor as a key and its new position in the regressors matrix as a value.
+    """
+    function qr_method(X::Matrix; columns::Dict)
+
+        x_pivot = qr(X, ColumnNorm())
+        
+        #info on the reordering of the columns: x_pivot.p (vector !)
+        columns_to_keep = x_pivot.p[1: rank(X)]
+        noncoli_regs = X[:, columns_to_keep]
+
+        #iterate over a dict which maps each old position to the new one
+        # the new_correspondance takes a regressor name as a key, and returns its new position in the non-collinear regressors Matrix as a value.
+        new_correspondance = Dict(columns[old_pos] => new_pos for (old_pos,new_pos) in Dict(value => index for (index,value) in enumerate(columns_to_keep)))
+        #println(columns_to_keep)
+
+        return noncoli_regs, new_correspondance
+
+    end
+
+    """
+        check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
+    Given a `DataFrame` and the base specification of `Table 2`, this function prints the OLS coefficients for the reported regressors.
+    """
+    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
 
         RY_vars = names(df_julia[:, r"RY"])
         CNTRY_vars = names(df_julia[:, r"cntry_"])
         all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi"],RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsJ)
-        
-        to_drop = vcat(["cntry_AE", "cntry_BM", "RY1X_MENA", "RY1X_SSAF", "RY1X_LAC", "RY1X_WEOFF", "RY1X_EECA", "RY1X_SEAS","RYPX1" ,"RY2X_MENA" ,"RY2X_SSAF", "RY2X_LAC", "RY2X_WEOFF","RY2X_EECA","RY2X_SEAS", "RYPX2", "RY3X_MENA", "RY3X_SSAF", "RY3X_LAC", "RY3X_WEOFF", "RY3X_EECA", "RY3X_SEAS", "RYPX3", "RY4X_MENA", "RY4X_SSAF", "RY4X_LAC","RY4X_WEOFF", "RY4X_EECA", "RY4X_SEAS", "RYPX4", "RY5X_MENA", "RY5X_SSAF", "RY5X_LAC", "RY5X_WEOFF", "RY5X_EECA", "RY5X_SEAS", "RYPX5", "RY6X_MENA","RY6X_SSAF", "RY6X_LAC", "RY6X_WEOFF", "RY6X_EECA", "RY6X_SEAS", "RYPX6", "RY7X_MENA", "RY7X_SSAF", "RY7X_LAC", "RY7X_WEOFF", "RY7X_EECA", "RY7X_SEAS", "RYPX7", "RY8X_MENA", "RY8X_SSAF", "RY8X_LAC", "RY8X_WEOFF", "RY8X_EECA","RY8X_SEAS", "RYPX8", "RY9X_MENA", "RY9X_SSAF", "RY9X_LAC", "RY9X_WEOFF","RY9X_EECA", "RY9X_SEAS", "RYPX9", "RY10X_MENA", "RY10X_SSAF", "RY10X_LAC", "RY10X_WEOFF", "RY10X_EECA", "RY10X_SEAS", "RYPX10", "RY11X_MENA", "RY11X_SSAF", "RY11X_LAC", "RY11X_WEOFF", "RY11X_EECA", "RY11X_SEAS", "RYPX11"], add_to_drop)
-        all_vars_nocollinearJ = select(all_varsJ, vcat([var for var in names(all_varsJ) if var ∉ to_drop]))
-        all_vars_nocollinearJ[!, :const] .= 1
+        all_varsJ[!, :const] .= 1
 
-        XJ = Matrix(select(all_vars_nocollinearJ, vcat([var for var in names(all_vars_nocollinearJ) if var != "g_lngdpwdi"])))
-        YJ = Vector(all_vars_nocollinearJ.g_lngdpwdi) 
-        coeffs_dictJ = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(all_vars_nocollinearJ) if var != "g_lngdpwdi"]), inv(XJ'*XJ)*XJ'*YJ))
+        #assign each regressor column to a name
+        col_corr = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
+        test = Dict(value => index for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
+
+        #create a matrix of regressors
+        x_colli = Matrix(select(all_varsJ, vcat([var for var in names(all_varsJ) if var != "g_lngdpwdi"])))
+        println(test["RY13X_SEAS"])
+        #remove collinear variables, get a dict which allows to retrieve coeffs based on name
+        XJ, find_regressor_pos = qr_method(x_colli, columns = col_corr)
+        println(find_regressor_pos["RY13X_SEAS"])
+        YJ = Vector(all_varsJ.g_lngdpwdi) 
+
+        #element 1 of coeffsJ corresponds to column 1 of regressors matrix. therefore we can access a specific coeff like so, for wtem: coeffsJ[find_regressor_pos["wtem]]
+        coeffsJ = inv(XJ'*XJ)*XJ'*YJ
+        #not entirely sure this works.
+        coeffs_dictJ = Dict( value => coeffsJ[find_regressor_pos[value]] for value in keys(find_regressor_pos) )
 
         all_varsS = select(df_stata, vcat(["wtem", "g"], RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsS)
-        all_vars_nocollinearS = select(all_varsS, vcat([var for var in names(all_varsS) if var ∉ to_drop]))
-        all_vars_nocollinearS[!, :const] .= 1
+        all_varsS[!, :const] .= 1
 
-        XS = Matrix(select(all_vars_nocollinearS, vcat([var for var in names(all_vars_nocollinearS) if var != "g"])))
-        YS = Vector(all_vars_nocollinearS.g)
-        coeffs_dictS = Dict(k[1] => k[2] for k in zip(vcat([var for var in names(all_vars_nocollinearS) if var != "g"]), inv(XS'*XS)*XS'*YS))
+        col_corrS = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsS) if var != "g"]))
 
-        for (dataset, info) in Dict("Julia" => ["climate_panel.csv", coeffs_dictJ],
+        xs_colli = Matrix(select(all_varsS, vcat([var for var in names(all_varsS) if var != "g"])))
+        XS, find_regressor_posS = qr_method(xs_colli, columns = col_corrS)
+        YS = Vector(all_varsS.g)
+
+        coeffsS = inv(XS'*XS)*XS'*YS
+        coeffs_dictS = Dict( value => coeffsS[find_regressor_posS[value]] for value in keys(find_regressor_posS) )
+
+        for (dataset, info) in Dict("Julia" => ["climate_panel_csv.csv", coeffs_dictJ],
                                         "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
-            for var in ["wtem", "const"]
+            for var in ["wtem", "const", "RY13X_SEAS"]
                 println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
             end
         end
         println("\n")
+        return Dict("julia" => coeffs_dictJ, "stata" => coeffs_dictS)
 
     end
-
 
         #figure2_visualise("climate_panel_csv.csv")                     
         make_table2("climate_panel_csv.csv")
