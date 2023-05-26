@@ -7,6 +7,7 @@ module DellReplicate
     using Impute
     using BenchmarkTools
     using Plots
+    using StatsPlots
     using Logging
     using PrettyTables
     using StatsModels
@@ -17,7 +18,7 @@ module DellReplicate
     """
         gen_vars_fig1!(df::DataFrame)
 
-    Generates the necessary mean temperature and precipiation variables for the two graphs of `Figure 1`, given the climate panel data.
+    Generates the necessary mean temperature and pDegreeirecipitation variables for the two graphs of `Figure 1`, given the climate panel data.
     Returns the modified version of input `df`.
     """
     function gen_vars_fig1!(df)
@@ -119,14 +120,51 @@ module DellReplicate
         return merged_climate_panel
     end
 
+    function figure1_visualise_graph2(df_name::String)
+        
+        df_ready_for_fig = figure1_data_cleaner(df_name)
+        println(names(df_ready_for_fig))
+        p1 = @df df_ready_for_fig plot(size=(800,600),titlefont=font(18, :red, :left, :bold, 1.1))
+        sub_df_array = [ collect(df_ready_for_fig[row_ind, [:wpremin, :wpremax, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(df_ready_for_fig))]
+        
+        mins = [ row[1] for row in sub_df_array ]
+        maxs = [row[2] for row in sub_df_array ]
+        lngdp2000 = [ row[3] for row in sub_df_array ]
+        countries = [ row[4] for row in sub_df_array ]
+
+        for i in 1:size(sub_df_array)[1]
+            if !ismissing(lngdp2000[i])
+            plot!(p1, [lngdp2000[i], lngdp2000[i]], [mins[i], maxs[i]], color=:grey, linewidth=1.3, label="")
+            end
+        end
+
+        @df df_ready_for_fig scatter!(p1, :lngdp2000, :wpre00s, marker=:star5, color=:red, label="Mean 1996-2005")
+        @df df_ready_for_fig scatter!(p1, :lngdp2000, :wpre50s, marker=:cross, color=:blue, label="Mean 1950-1959")
+        @df df_ready_for_fig xlims!(minimum(skipmissing(:lngdp2000))-0.5, maximum(skipmissing(:lngdp2000))+0.5) 
+        ylims!(-10, 60) 
+        xticks!(1:10) 
+
+        for i in eachindex(countries)
+            x = lngdp2000[i]
+            y = (mins[i] + maxs[i]) / 2
+            annotate!(x + 0.15, y, text(countries[i], 5))
+        end
+
+        ylabel!("100s mm/year") 
+        xlabel!("Log per-capita GDP in 2000")
+        title!("Precipitation\nWeighted by population", )
+
+        display(p1)
+    end
+
     """
-        figure1_visualise(df::String)
+        figure1_visualise_graph1(df::String)
 
     Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
     dataset. The figure is a combination of 128 line plots (one for each country) showing the temperature range and two scatter plots showing the mean temperature
     values for the periods 1950-1959 and 1996-2005.
     """
-    function figure1_visualise(df_name::String)
+    function figure1_visualise_graph1(df_name::String)
         
         
         clean_df = figure1_data_cleaner(df_name)
@@ -164,8 +202,9 @@ module DellReplicate
         
         ylabel!("Degrees") 
         xlabel!("Log per-capita GDP in 2000")
-        title!("Temperature", )
-        display(p1)
+        title!("Temperature\nWeighted by population", )
+        #display(p1)
+        figure1_visualise_graph2(df_name)
 
     end
 
@@ -466,7 +505,6 @@ module DellReplicate
         filter!(:year => <=(2003), climate_panel)
 
         transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp)
-        println(climate_panel[1:20,:lgdp])
         sort!(climate_panel, [:fips60_06, :year])
 
         climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
@@ -566,14 +604,10 @@ module DellReplicate
 
         #assign each regressor column to a name
         col_corr = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
-        test = Dict(value => index for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
 
         #create a matrix of regressors
         x_colli = Matrix(select(all_varsJ, vcat([var for var in names(all_varsJ) if var != "g_lngdpwdi"])))
-        println(test["RY13X_SEAS"])
-        #remove collinear variables, get a dict which allows to retrieve coeffs based on name
         XJ, find_regressor_pos = qr_method(x_colli, columns = col_corr)
-        println(find_regressor_pos["RY13X_SEAS"])
         YJ = Vector(all_varsJ.g_lngdpwdi) 
 
         #element 1 of coeffsJ corresponds to column 1 of regressors matrix. therefore we can access a specific coeff like so, for wtem: coeffsJ[find_regressor_pos["wtem]]
@@ -606,6 +640,7 @@ module DellReplicate
     end
 
         #figure2_visualise("climate_panel_csv.csv")                     
+        #figure1_visualise_graph1("climate_panel_csv.csv")
         make_table2("climate_panel_csv.csv")
 
 end
