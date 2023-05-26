@@ -8,6 +8,9 @@ module DellReplicate
     using BenchmarkTools
     using Plots
     using Logging
+    using GLM
+    using CovarianceMatrices
+    using LinearAlgebra
     
 
     """
@@ -249,6 +252,44 @@ module DellReplicate
 
     end
 
+    function HCE(df::DataFrame, y::String, x::String)
+        # Extract the response vector y and the covariate(s) x from the dataframe
+        Y_ = df[:, Symbol(y)]
+        X_ = df[:, Symbol.(x)]
+        formula = Term(Symbol(y)) ~ ConstantTerm(1) + Term(Symbol(x))
+
+        # Create the design matrix X by concatenating a column of ones with the covariate(s)
+        X = hcat(ones(length(Y_)), X_)
+        # Fit the linear regression model
+        
+        ols1 = lm(formula, df)
+
+        # Compute the predicted values
+        y_hat = X * coef(ols1)
+
+        # Compute the residuals
+        residuals = vec(Y_ .- y_hat)
+
+        # Compute the hat matrix (X * (X'X)^(-1)X')
+        hat_matrix = X * inv(X' * X) * X'
+
+        # Compute the squared residuals weighted by the hat matrix
+        squared_residuals = residuals.^ 2
+        weighted_residuals = squared_residuals ./ (1 .- diag(hat_matrix))
+
+        # Compute the variance-covariance matrix of the coefficients
+        robust_se = inv(X' * X) * X' * Diagonal(weighted_residuals) * X * inv(X' * X)
+
+        # Extract the standard errors for the coefficients
+        coefficient_se = sqrt.(diag(robust_se))
+        
+        # Return the standard errors of the fitted values
+        #Here is the error
+        #se_fit = sqrt.(X *robust_se* X')
+
+        return robust_se, coefficient_se
+    end
+
     function gen_xtile_vars(climate_panel::DataFrames.DataFrame)
 
         temp1 = copy(climate_panel)
@@ -258,7 +299,7 @@ module DellReplicate
         temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
         # CAREFUL ABOUT THE SORTING
         sort!(temp1, :initgdpbin)
-        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .<= temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
         select!(temp1, [:fips60_06, :initgdpbin])
         merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
         merged_1[:, :initgdpbin] .= ifelse.(ismissing.(merged_1.initgdpbin), 999, merged_1.initgdpbin)
@@ -272,7 +313,7 @@ module DellReplicate
         filter!(:countrows => ==(1), temp2)
         temp2[!, :initwtem50bin] .= temp2.wtem50 / size(temp2)[1]
         sort!(temp2, :initwtem50bin)
-        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .< temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
+        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .<= temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
         select!(temp2, [:fips60_06, :initwtem50bin])
         merged_2 = outerjoin(climate_panel, temp2, on=[:fips60_06])
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
@@ -287,7 +328,7 @@ module DellReplicate
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
-        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
+        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .<= temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
@@ -365,7 +406,7 @@ module DellReplicate
         for (k,v) in temp_df
             climate_panel = outerjoin(climate_panel, v, on = :fips60_06)
         end
-
+        
         #Non working version, although it looks cooler
         #@. climate_panel = outerjoin.(climate_panel, values(temp_df), on = :fips60_06)
 
@@ -394,12 +435,41 @@ module DellReplicate
             for var in [ name for name in names(climate_panel) if occursin("change", name) ]
             #println(var)
             end
+            # Kepp only 2003 
+
+            ols_temp_1 = filter(:year => ==(2003), climate_panel)
+            # Keep if initxgdpxtile1 == 1
+            ols_temp_1 = dropmissing(ols_temp_1, :initgdpxtile1)
+            ols_temp_1 = filter(:initgdpxtile1 => ==(1),ols_temp_1)
+
+            
+            # Extract the standard errors for the coefficients
+            coefficient_se_1 = HCE(ols_temp_1, "changeS1g_lngdpwdi", "changeS1wtem" )
+            print(coefficient_se_1[1])
+            #print(coefficient_se_1[3])
+
+            
+            #print(size(predicted_values_1))
+
+            ols_temp_2 = filter(:year => ==(2003), climate_panel)
+            # Keep if initxgdpxtile1 == 1
+            ols_temp_2 = dropmissing(ols_temp_2, :initgdpxtile1)
+            ols_temp_2 = filter(:initgdpxtile1 => !=(1),ols_temp_2)
+
+            # Compute the robust standard errors
+            coefficient_se_2 = HCE(ols_temp_2, "changeS1g_lngdpwdi", "changeS1wtem" )
+            #print("les std sont : $coefficient_se_2")
+            
+            ols2 = lm(@formula(changeS1g_lngdpwdi~changeS1wtem), ols_temp_2)
+            
+           
 
     #println(climate_panel[1:200, [:fips60_06, :year, :changeS1wtem, :changeS2wtem, :changeS3wtem]])
     #println(names(climate_panel))
     end
 
     #figure2_visualise("climate_panel_csv.csv")
+    
 
     """
         make_table_1(raw_df_name::String)
