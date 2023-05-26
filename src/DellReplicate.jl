@@ -285,9 +285,9 @@ module DellReplicate
         
         # Return the standard errors of the fitted values
         #Here is the error
-        #se_fit = sqrt.(X *robust_se* X')
+        se_fit = sqrt.(diag(X *robust_se* X'))
 
-        return robust_se, coefficient_se
+        return coefficient_se, y_hat, se_fit
     end
 
     function gen_xtile_vars(climate_panel::DataFrames.DataFrame)
@@ -445,9 +445,9 @@ module DellReplicate
             
             # Extract the standard errors for the coefficients
             coefficient_se_1 = HCE(ols_temp_1, "changeS1g_lngdpwdi", "changeS1wtem" )
-            print(coefficient_se_1[1])
-            #print(coefficient_se_1[3])
-
+            
+            c_plus_1 = coefficient_se_1[2]+ 1.96 * coefficient_se_1[3]
+            c_minus_1 = coefficient_se_1[2] - 1.96 * coefficient_se_1[3]
             
             #print(size(predicted_values_1))
 
@@ -459,8 +459,10 @@ module DellReplicate
             # Compute the robust standard errors
             coefficient_se_2 = HCE(ols_temp_2, "changeS1g_lngdpwdi", "changeS1wtem" )
             #print("les std sont : $coefficient_se_2")
+            c_plus_1 = coefficient_se_2[2]+ 1.96 * coefficient_se_2[3]
+            c_minus_1 = coefficient_se_2[2] - 1.96 * coefficient_se_2[3]
             
-            ols2 = lm(@formula(changeS1g_lngdpwdi~changeS1wtem), ols_temp_2)
+            
             
            
 
