@@ -449,7 +449,34 @@ module DellReplicate
             c_plus_1 = coefficient_se_1[2]+ 1.96 * coefficient_se_1[3]
             c_minus_1 = coefficient_se_1[2] - 1.96 * coefficient_se_1[3]
             
-            #print(size(predicted_values_1))
+            
+            
+            p = scatter(ols_temp_1[:,:changeS1wtem], ols_temp_1[:,:changeS1g_lngdpwdi], legend=false)
+            
+            for i in 1:length(ols_temp_1[:,:changeS1wtem])
+                annotate!(ols_temp_1[:,:changeS1wtem][i], ols_temp_1[:,:changeS1g_lngdpwdi][i], text(ols_temp_1[:,:country_code][i], :left, 8, :black))
+            end
+            # Add a line plot for the fitted values
+            plot!(ols_temp_1[:,:changeS1wtem], coefficient_se_1[2], linewidth=2)
+            # Add the confidence interval
+            Minus = hcat(c_minus_1,ols_temp_1[:,:changeS1wtem])
+            Plus = hcat(c_plus_1,ols_temp_1[:,:changeS1wtem])
+            plot!(sort(ols_temp_1[:,:changeS1wtem]), Minus[sortperm(Minus[:,2]),:][:,1], color=:blue)
+            plot!(sort(ols_temp_1[:,:changeS1wtem]), Plus[sortperm(Plus[:,2]),:][:,1], color=:blue)
+            
+            # Add a dashed line at y = 0
+            hline!(p, [0], linestyle=:dash, color=:black)
+
+            xlims!(-0.5, 1)
+            ylims!(-10, 10)
+            # Label the axes
+            xlabel!("Change in temperature")
+            ylabel!("Change in growth")
+            # Set the plot title
+            title!("A. Poor countries")
+            
+
+           
 
             ols_temp_2 = filter(:year => ==(2003), climate_panel)
             # Keep if initxgdpxtile1 == 1
@@ -459,11 +486,34 @@ module DellReplicate
             # Compute the robust standard errors
             coefficient_se_2 = HCE(ols_temp_2, "changeS1g_lngdpwdi", "changeS1wtem" )
             #print("les std sont : $coefficient_se_2")
-            c_plus_1 = coefficient_se_2[2]+ 1.96 * coefficient_se_2[3]
-            c_minus_1 = coefficient_se_2[2] - 1.96 * coefficient_se_2[3]
+            c_plus_2 = coefficient_se_2[2]+ 1.96 * coefficient_se_2[3]
+            c_minus_2 = coefficient_se_2[2] - 1.96 * coefficient_se_2[3]
             
+            p2 = scatter(ols_temp_2[:,:changeS1wtem], ols_temp_2[:,:changeS1g_lngdpwdi], legend=false)
             
+            for i in 1:length(ols_temp_2[:,:changeS1wtem])
+                annotate!(ols_temp_2[:,:changeS1wtem][i], ols_temp_2[:,:changeS1g_lngdpwdi][i], text(ols_temp_2[:,:country_code][i], :left, 8, :black))
+            end
+            # Add a line plot for the fitted values
+            plot!(ols_temp_2[:,:changeS1wtem], coefficient_se_2[2], linewidth=2)
+            # Add the confidence interval
+            Minus2 = hcat(c_minus_2,ols_temp_2[:,:changeS1wtem])
+            Plus2 = hcat(c_plus_2,ols_temp_2[:,:changeS1wtem])
+            plot!(sort(ols_temp_2[:,:changeS1wtem]), Minus2[sortperm(Minus2[:,2]),:][:,1], color=:blue)
+            plot!(sort(ols_temp_2[:,:changeS1wtem]), Plus2[sortperm(Plus2[:,2]),:][:,1], color=:blue)
             
+            # Add a dashed line at y = 0
+            hline!(p2, [0], linestyle=:dash, color=:black)
+            xlims!(-0.5, 1.5)
+            ylims!(-10, 10)
+            # Label the axes
+            xlabel!("Change in temperature")
+            ylabel!("Change in growth")
+            # Set the plot title
+            title!("B. Rich countries")
+            
+            fig2 = plot(p, p2, layout = (2, 1), size = (800, 600))
+            display(fig2)
            
 
     #println(climate_panel[1:200, [:fips60_06, :year, :changeS1wtem, :changeS2wtem, :changeS3wtem]])
