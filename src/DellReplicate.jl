@@ -120,6 +120,13 @@ module DellReplicate
         return merged_climate_panel
     end
 
+    """
+        figure1_visualise_graph2(df_name::String)
+
+    Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
+    dataset. The figure is a combination of 128 line plots (one for each country) showing the precipitation range and two scatter plots showing the mean precipitation
+    values for the periods 1950-1959 and 1996-2005.
+    """
     function figure1_visualise_graph2(df_name::String)
         
         df_ready_for_fig = figure1_data_cleaner(df_name)
@@ -158,7 +165,7 @@ module DellReplicate
     end
 
     """
-        figure1_visualise_graph1(df::String)
+        figure1_visualise_graph1(df_name::String)
 
     Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
     dataset. The figure is a combination of 128 line plots (one for each country) showing the temperature range and two scatter plots showing the mean temperature
@@ -540,6 +547,7 @@ module DellReplicate
             filter_transform!(climate_panel, Symbol(var) => ==(1), :region => (b -> (b = var)) => :region )
         end
         
+        #second cluster
         climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
 
         #dummies: 1 for each country
@@ -575,6 +583,7 @@ module DellReplicate
     """
     function qr_method(X::Matrix; columns::Dict)
 
+
         x_pivot = qr(X, ColumnNorm())
         
         #info on the reordering of the columns: x_pivot.p (vector !)
@@ -583,12 +592,64 @@ module DellReplicate
 
         #iterate over a dict which maps each old position to the new one
         # the new_correspondance takes a regressor name as a key, and returns its new position in the non-collinear regressors Matrix as a value.
+        #println(pairs(IndexLinear(), columns_to_keep))
         new_correspondance = Dict(columns[old_pos] => new_pos for (old_pos,new_pos) in Dict(value => index for (index,value) in enumerate(columns_to_keep)))
         #println(columns_to_keep)
 
         return noncoli_regs, new_correspondance
 
     end
+
+    function create_cluster(Y::Vector, cluster_values::Vector)
+
+        #now need to create clusters
+        cluster = zeros(Int64, size(Y)[1], size(Y)[1])
+        for (index_j,j) in enumerate(cluster_values)
+            for (index_i,i) in enumerate(cluster_values)
+                if j == i
+                    cluster[index_j, index_i] = 1
+                end
+            end
+        end
+
+        return cluster
+    end
+
+    function two_way_clustered_sterrs(c_cluster::Matrix, ry_cluster::Matrix, twoway_cluster::Matrix, X::Matrix, Y::Vector, β::Vector, n_countries::Array, n_regionyear::Array)    
+
+        u_countries = zeros(size(n_countries)[1] ,1)
+        #c = Vector(length(n_countries), 1) 
+
+        c_countries_vals = n_countries ./ (n_countries .- 1)
+        c_countries = vcat([ fill(val, n_countries[index]) for (index,val) in enumerate(c_countries_vals) ]...)
+
+        c_regionyear_vals = n_regionyear ./ (n_regionyear .- 1)
+        for (index,val) in enumerate(c_regionyear_vals)
+            if val == Inf
+                c_regionyear_vals[index] = 2
+            end
+        end
+        c_regionyear = vcat([ fill(val, n_regionyear[index]) for (index,val) in enumerate(c_regionyear_vals) ]...)
+
+        u = Y - X*β
+        println(size(u), size(sqrt.(c_countries)))
+        u_countries = u .* sqrt.(c_countries)
+        u_regionyear = u .* sqrt.(c_regionyear)
+
+        #predicted error
+        println("The size of u is $(size(u))")
+
+        #term in the middle of var formula
+        B_c = X'*(u_countries*u_countries' .* c_cluster)*X
+        B_ry = X'*(u_regionyear*u_regionyear' .* ry_cluster)*X
+        B_inter = X'*(u*u' .* twoway_cluster)*X
+        #B = X'*(u*u' .* cluster)*X
+
+        #full variance of β. The position of each regressor in the variance and the coefficient vectors should remain unchanged.
+        return inv(X'*X)*(B_c)*inv(X'*X) + inv(X'*X)*(B_ry)*inv(X'*X) - inv(X'*X)*(B_inter)*inv(X'*X)
+
+    end
+
 
     """
         check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
@@ -598,12 +659,20 @@ module DellReplicate
 
         RY_vars = names(df_julia[:, r"RY"])
         CNTRY_vars = names(df_julia[:, r"cntry_"])
-        all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi"],RY_vars, CNTRY_vars, other_regressors))
+        all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi", "parent", "regionyear"],RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsJ)
+
+        #we cluster at parent level first, so need to keep track of those observations.
+        #remaining_parents = convert.(String, all_varsJ.fips60_06)
+        remaining_parents = all_varsJ.parent
+        remaining_regionyear = all_varsJ.regionyear
+        select!(all_varsJ, Not(:parent))
+        select!(all_varsJ, Not(:regionyear)) 
         all_varsJ[!, :const] .= 1
 
         #assign each regressor column to a name
         col_corr = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
+        col_corr_val = Dict(value => index for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
 
         #create a matrix of regressors
         x_colli = Matrix(select(all_varsJ, vcat([var for var in names(all_varsJ) if var != "g_lngdpwdi"])))
@@ -612,7 +681,23 @@ module DellReplicate
 
         #element 1 of coeffsJ corresponds to column 1 of regressors matrix. therefore we can access a specific coeff like so, for wtem: coeffsJ[find_regressor_pos["wtem]]
         coeffsJ = inv(XJ'*XJ)*XJ'*YJ
-        #not entirely sure this works.
+                
+        #broadcast necessary since we compare individual dummies.
+        country_cluster = create_cluster(YJ, Vector(remaining_parents))
+        regionyear_cluster = create_cluster(YJ, Vector(remaining_regionyear))
+        twoway_cluster = create_cluster(YJ, Vector(remaining_parents)) .+ create_cluster(YJ, Vector(remaining_regionyear)) - (create_cluster(YJ, Vector(remaining_parents)) .* create_cluster(YJ, Vector(remaining_regionyear)))
+
+        n_clusters_countries = hcat([[i, count(==(i), Array(remaining_parents))] for i in unique(Array(remaining_parents))]...)[2,:]
+        n_clusters_regionyear = hcat([[i, count(==(i), Array(remaining_regionyear))] for i in unique(Array(remaining_regionyear))]...)[2,:]
+        n_clusters_intersection = hcat([[i, count(==(i), Array(remaining_parents) .* Array(remaining_regionyear))] for i in unique(Array(remaining_parents) .* Array(remaining_regionyear))]...)[2,:]
+
+        #follow the steps from the paper. first create the \hat{b} variable X'(uu'*twoway_cluster)X where u = Y - Xβ.
+        varsJ = two_way_clustered_sterrs(country_cluster, regionyear_cluster, twoway_cluster, XJ, YJ, coeffsJ, n_clusters_countries, n_clusters_regionyear)
+        test = diag(varsJ)
+        println(test[1])
+
+        return
+
         coeffs_dictJ = Dict( value => coeffsJ[find_regressor_pos[value]] for value in keys(find_regressor_pos) )
 
         all_varsS = select(df_stata, vcat(["wtem", "g"], RY_vars, CNTRY_vars, other_regressors))
