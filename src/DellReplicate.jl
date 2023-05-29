@@ -11,6 +11,7 @@ module DellReplicate
     using GLM
     using CovarianceMatrices
     using LinearAlgebra
+    using StatsModels
     
 
     """
