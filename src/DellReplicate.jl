@@ -254,7 +254,7 @@ module DellReplicate
 
     """
         gen_lag_vars(df::DataFrames.DataFrame)
-    Generates all the variables necessary for figure 2 and others.
+    Generates all the lagged variables as well as the interaction between temperature/precipitation and poor/rich variables necessary for figure 2 and others.
     """
     function gen_lag_vars(df::DataFrames.DataFrame)
         

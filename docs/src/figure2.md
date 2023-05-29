@@ -1,3 +1,9 @@
-# THIS IS A SECOND TEST
+```@meta
+CurrentModule = DellReplicate
+```
 
-Is this working ?
+# Functions for Figure 2
+
+## Graph 1
+
+## Graph 2
