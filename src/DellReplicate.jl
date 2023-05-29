@@ -7,14 +7,18 @@ module DellReplicate
     using Impute
     using BenchmarkTools
     using Plots
+    using StatsPlots
     using Logging
     using PrettyTables
+    using StatsModels
+    using GLM
+    using LinearAlgebra
     
 
     """
         gen_vars_fig1!(df::DataFrame)
 
-    Generates the necessary mean temperature and precipiation variables for the two graphs of `Figure 1`, given the climate panel data.
+    Generates the necessary mean temperature and pDegreeirecipitation variables for the two graphs of `Figure 1`, given the climate panel data.
     Returns the modified version of input `df`.
     """
     function gen_vars_fig1!(df)
@@ -117,13 +121,57 @@ module DellReplicate
     end
 
     """
-        figure1_visualise(df::String)
+        figure1_visualise_graph2(df_name::String)
+
+    Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
+    dataset. The figure is a combination of 128 line plots (one for each country) showing the precipitation range and two scatter plots showing the mean precipitation
+    values for the periods 1950-1959 and 1996-2005.
+    """
+    function figure1_visualise_graph2(df_name::String)
+        
+        df_ready_for_fig = figure1_data_cleaner(df_name)
+        println(names(df_ready_for_fig))
+        p1 = @df df_ready_for_fig plot(size=(800,600),titlefont=font(18, :red, :left, :bold, 1.1))
+        sub_df_array = [ collect(df_ready_for_fig[row_ind, [:wpremin, :wpremax, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(df_ready_for_fig))]
+        
+        mins = [ row[1] for row in sub_df_array ]
+        maxs = [row[2] for row in sub_df_array ]
+        lngdp2000 = [ row[3] for row in sub_df_array ]
+        countries = [ row[4] for row in sub_df_array ]
+
+        for i in 1:size(sub_df_array)[1]
+            if !ismissing(lngdp2000[i])
+            plot!(p1, [lngdp2000[i], lngdp2000[i]], [mins[i], maxs[i]], color=:grey, linewidth=1.3, label="")
+            end
+        end
+
+        @df df_ready_for_fig scatter!(p1, :lngdp2000, :wpre00s, marker=:star5, color=:red, label="Mean 1996-2005")
+        @df df_ready_for_fig scatter!(p1, :lngdp2000, :wpre50s, marker=:cross, color=:blue, label="Mean 1950-1959")
+        @df df_ready_for_fig xlims!(minimum(skipmissing(:lngdp2000))-0.5, maximum(skipmissing(:lngdp2000))+0.5) 
+        ylims!(-10, 60) 
+        xticks!(1:10) 
+
+        for i in eachindex(countries)
+            x = lngdp2000[i]
+            y = (mins[i] + maxs[i]) / 2
+            annotate!(x + 0.15, y, text(countries[i], 5))
+        end
+
+        ylabel!("100s mm/year") 
+        xlabel!("Log per-capita GDP in 2000")
+        title!("Precipitation\nWeighted by population", )
+
+        display(p1)
+    end
+
+    """
+        figure1_visualise_graph1(df_name::String)
 
     Plots `Figure 1` from Dell (2012) by calling the data cleaning function `figure1_data_cleaner` with the `climate_panel_csv.csv`
     dataset. The figure is a combination of 128 line plots (one for each country) showing the temperature range and two scatter plots showing the mean temperature
     values for the periods 1950-1959 and 1996-2005.
     """
-    function figure1_visualise(df_name::String)
+    function figure1_visualise_graph1(df_name::String)
         
         
         clean_df = figure1_data_cleaner(df_name)
@@ -161,8 +209,9 @@ module DellReplicate
         
         ylabel!("Degrees") 
         xlabel!("Log per-capita GDP in 2000")
-        title!("Temperature", )
-        display(p1)
+        title!("Temperature\nWeighted by population", )
+        #display(p1)
+        figure1_visualise_graph2(df_name)
 
     end
 
@@ -190,6 +239,15 @@ module DellReplicate
     end
 
     """
+        filter_transform!(df::DataFrames.DataFrame, pred, args)
+    Transforms the data on a filtered subset using a predicate function (a function that returns true or false).
+    """
+    function filter_transform!(df::DataFrames.DataFrame, pred, args)
+        fdf = filter(pred, df, view = true)
+        fdf .= transform(copy(fdf), args)
+    end
+
+    """
         gen_lag_vars(df::DataFrames.DataFrame)
     Generates all the variables necessary for figure 2 and others.
     """
@@ -200,7 +258,7 @@ module DellReplicate
         for var in [ "wtem", "wpre" ]
             lag_df[!, "$(var)Xlnrgdpl_t0"] .= df[:, var] .* df[:, :lnrgdpl_t0]
 
-            for bin_var in [ "initagshare95xtile1", "initagshare95xtile2", "initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2"]
+            for bin_var in [ "initxtileagshare1", "initxtileagshare2", "initxtilegdp1", "initxtilegdp2", "initxtilewtem1", "initxtilewtem2"]
                 lag_df[!, "$(var)_$(bin_var)"] .= df[:, var] .* df[:, bin_var]
             end
 
@@ -227,7 +285,7 @@ module DellReplicate
         unique_years = [year for year in range(1,numyears+1)]
         
         region_vars = ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS"]
-        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initgdpxtile1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
+        temp_df = df[:, [Symbol(col) for col in names(df) if (col in region_vars) | (col in ["initxtilegdp1", "year", "fips60_06"]) | (col[1:2] == "yr")]]
 
         #dummies: 1 for each year
         transform!(groupby(temp_df, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
@@ -237,9 +295,10 @@ module DellReplicate
                 for region in region_vars
                     temp_df[!, Symbol(:RY, year, "X", region)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df[:, region]
                 end
-                temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initgdpxtile1
+                temp_df[!, Symbol(:RY, "PX", year)] .= temp_df[:, Symbol(:yr_,year)] .* temp_df.initxtilegdp1
             end
         end
+        
 
         return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
@@ -254,12 +313,12 @@ module DellReplicate
         temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
         # CAREFUL ABOUT THE SORTING
         sort!(temp1, :initgdpbin)
-        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
+        temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .<= temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
         select!(temp1, [:fips60_06, :initgdpbin])
         merged_1 = outerjoin(climate_panel, temp1, on=[:fips60_06]) 
         merged_1[:, :initgdpbin] .= ifelse.(ismissing.(merged_1.initgdpbin), 999, merged_1.initgdpbin)
-        merged_1[!, :initgdpxtile1] .= ifelse.(merged_1.initgdpbin .== 1, 1, ifelse.(merged_1.initgdpbin .== 2, 0, missing))
-        merged_1[!, :initgdpxtile2] .= ifelse.(merged_1.initgdpbin .== 2, 1, ifelse.(merged_1.initgdpbin .== 1, 0, missing))
+        merged_1[!, :initxtilegdp1] .= ifelse.(merged_1.initgdpbin .== 1, 1, ifelse.(merged_1.initgdpbin .== 2, 0, missing))
+        merged_1[!, :initxtilegdp2] .= ifelse.(merged_1.initgdpbin .== 2, 1, ifelse.(merged_1.initgdpbin .== 1, 0, missing))
         climate_panel = merged_1
 
         temp2 = copy(climate_panel)
@@ -268,12 +327,12 @@ module DellReplicate
         filter!(:countrows => ==(1), temp2)
         temp2[!, :initwtem50bin] .= temp2.wtem50 / size(temp2)[1]
         sort!(temp2, :initwtem50bin)
-        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .< temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
+        temp2[!, :initwtem50bin] .= ifelse.(temp2.initwtem50bin .<= temp2[Int(round(size(temp2)[1] / 2)), :initwtem50bin], 1, 2)
         select!(temp2, [:fips60_06, :initwtem50bin])
         merged_2 = outerjoin(climate_panel, temp2, on=[:fips60_06])
         merged_2[:, :initwtem50bin] .= ifelse.(ismissing.(merged_2.initwtem50bin), 999, merged_2.initwtem50bin)
-        merged_2[!, :initwtem50xtile1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
-        merged_2[!, :initwtem50xtile2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
+        merged_2[!, :initxtilewtem1] .= ifelse.(merged_2.initwtem50bin .== 1, 1, ifelse.(merged_2.initwtem50bin .== 2, 0, missing))
+        merged_2[!, :initxtilewtem2] .= ifelse.(merged_2.initwtem50bin .== 2, 1, ifelse.(merged_2.initwtem50bin .== 1, 0, missing))
         climate_panel = merged_2
 
         temp3 = copy(climate_panel)
@@ -283,13 +342,13 @@ module DellReplicate
         non_missings_t3 = size(temp3)[1] - count(ismissing.(temp3.initagshare1995))
         sort!(temp3, :initagshare1995)
         temp3[!, :initagshare1995] .= ifelse.(ismissing.(temp3.initagshare1995), 999, temp3.initagshare1995)
-        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .< temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
+        temp3[:, :initagshare1995] .= ifelse.((temp3.initagshare1995 .<= temp3[Int(round(non_missings_t3/2)), :initagshare1995]), 1 ,2)
         temp3[:, :initagshare1995] .= ifelse.(ismissing.(temp3.gdpSHAREAG), 999, temp3.initagshare1995)
         select!(temp3, [:fips60_06, :initagshare1995])
         merged_3 = outerjoin(climate_panel, temp3, on=[:fips60_06])
         merged_3[:, :initagshare1995] .= ifelse.(ismissing.(merged_3.initagshare1995), 999, merged_3.initagshare1995)
-        merged_3[!, :initagshare95xtile1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
-        merged_3[!, :initagshare95xtile2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
+        merged_3[!, :initxtileagshare1] .= ifelse.(merged_3.initagshare1995 .== 1, 1, ifelse.(merged_3.initagshare1995 .== 2, 0, missing))
+        merged_3[!, :initxtileagshare2] .= ifelse.(merged_3.initagshare1995 .== 2, 1, ifelse.(merged_3.initagshare1995 .== 1, 0, missing))
          
         return merged_3
     end
@@ -345,7 +404,7 @@ module DellReplicate
 
         filter!(:year => <=(2003), climate_panel)
 
-        transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp1)
+        
 
         sort!(climate_panel, [:fips60_06, :year])
 
@@ -374,10 +433,6 @@ module DellReplicate
 
         #Make sure all subcomponents are non-missing in a given year
         climate_panel[!, :misdum] .= 0
-        function filter_transform!(df, pred, args)
-            fdf = filter(pred, df, view = true)
-            fdf .= transform(copy(fdf), args)
-        end
         for var in [:g_lnag, :g_lnind]
             filter_transform!(climate_panel,var => ismissing, :misdum => (b -> (b=1)) => :misdum)
         end
@@ -399,12 +454,12 @@ module DellReplicate
         
         for var in ["wtem", "wpre"]
             climate_panel[!, "$(var)Xlnrgdpl_t0"] .= climate_panel[!, var] .* climate_panel[!, "lnrgdpl_t0"]
-            for name in ["initgdpxtile1", "initgdpxtile2", "initwtem50xtile1", "initwtem50xtile2", "initagshare95xtile1", "initagshare95xtile2"]
+            for name in ["initxtilegdp1", "initxtilegdp2", "initxtilewtem1", "initxtilewtem2", "initxtileagshare1", "initxtileagshare2"]
                 climate_panel[!, "$(var)_$name"] .= climate_panel[!, var] .* climate_panel[!, name]
             end
         end
+        
         climate_panel = gen_year_vars(climate_panel)
-   
         for var in [:wtem,:wpre]
             transform!(groupby(climate_panel, :fips60_06), var => mean => Symbol(var, "countrymean"))
             climate_panel[!,Symbol(var, "_withoutcountrymean")] .= climate_panel[!,var] .- climate_panel[!,Symbol(var, "countrymean")]
@@ -451,8 +506,229 @@ module DellReplicate
         pretty_table(table2)
     end
 
-        #figure2_visualise("climate_panel_csv.csv")                     
-        make_table1("climate_panel_csv.csv")
+    """
+        make_table2(raw_df_name::String)
+
+    The "master" function used to store OLS coefficients and standard errors from `Table 2` in the paper. Performs various data cleaning actions and relies on the same
+    functions as `make_table1()` to generate the variables. 
+    """
+    function make_table2(raw_df_name::String)
+        climate_panel = read_csv(raw_df_name)
+
+        filter!(:year => <=(2003), climate_panel)
+
+        transform!(climate_panel, :rgdpl => (x -> log.(x)) => :lgdp)
+        sort!(climate_panel, [:fips60_06, :year])
+
+        climate_panel[!, :lngdpwdi] .= log.(climate_panel.gdpLCU)
+        climate_panel[!, :lngdppwt] .= log.(climate_panel.rgdpl)
+        growth_var!(climate_panel, :lngdpwdi)
+
+        climate_panel[!, :lnag] .= log.(climate_panel.gdpWDIGDPAGR)
+        climate_panel[!, :lnind] .= log.(climate_panel.gdpWDIGDPIND)
+        climate_panel[!, :lninvest] .= log.( ( climate_panel.rgdpl .* climate_panel.ki ) ./ 100)
+
+        #Compute the growth rate for each value 
+        for var in [:lnag, :lnind, :lngdpwdi, :lninvest]
+            growth_var!(climate_panel, var)        
+        end
+        
+        climate_panel = keep_20yrs_gdp(climate_panel)
+
+        #Make sure all subcomponents are non-missing in a given year
+        climate_panel[!, :misdum] .= 0
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,var => ismissing, :misdum => (b -> (b=1)) => :misdum)
+        end
+        for var in [:g_lnag, :g_lnind]
+            filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
+        end
+
+        climate_panel = gen_xtile_vars(climate_panel)
+        climate_panel = gen_lag_vars(climate_panel)
+        climate_panel = gen_year_vars(climate_panel)
+
+        climate_panel[!, :region] .= ""
+        for var in ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS" ]
+            filter_transform!(climate_panel, Symbol(var) => ==(1), :region => (b -> (b = var)) => :region )
+        end
+        
+        #second cluster variable
+        climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
+
+        #dummies: 1 for each country
+        countries = unique(climate_panel[:, :fips60_06])
+        transform!(groupby(climate_panel, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries)) 
+
+        #climate_panel_b4reg is the state of the data in stata right before running the first regression and will be used for comparison purposes.
+        climate_panel2 = read_csv("climate_panel_b4reg.csv")
+        transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
+
+        #first column
+        col1 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors= [])
+
+        #second column
+        col2 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1"])
+
+        #third column
+        col3 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1"])
+
+        #fourth column
+        col4 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
+
+        #fifth column (to drop: country BF)
+        col5 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
+
+    end
+
+
+    """
+        qr_method(X::Matrix; columns::Dict)
+    Returns a new matrix of regressors free of collinearity issues (i.e. full rank matrix) using the QR method as described by Engler (1997).
+    Also returns a dictionnary with the name of the regressor as a key and its new position in the regressors matrix as a value, from the dict `columns` which 
+    maps an old position to a regressor name. Note that the `new_correspondance` dict can also be used to retrieve standard errors (done later in the code).
+    """
+    function qr_method(X::Matrix; columns::Dict)
+
+
+        x_qr = qr(X, ColumnNorm())
+        
+        #info on the reordering of the columns: x_qr.p (vector !)
+        columns_to_keep = x_qr.p[1: rank(X)]
+        noncoli_regs = X[:, columns_to_keep]
+
+        # the new_correspondance takes a regressor name as a key, and returns its new position in the non-collinear regressors Matrix as a value.
+        new_correspondance = Dict(columns[old_pos] => new_pos for (old_pos,new_pos) in Dict(value => index for (index,value) in enumerate(columns_to_keep)))
+
+        return noncoli_regs, new_correspondance
+
+    end
+
+    """
+        create_cluster(Y::Vector, cluster_values::Vector)
+    
+    Generates a `size(Y)`x`size(Y)` matrix of indicator variables equal to `1` if observation *i* and *j* share the same cluster value.
+    The `cluster_value` parameter accepts vectors of the same size as `Y`. 
+    """
+    function create_cluster(Y::Vector, cluster_values::Vector)
+
+        cluster = zeros(Int64, size(Y)[1], size(Y)[1])
+        for (index_j,j) in enumerate(cluster_values)
+            for (index_i,i) in enumerate(cluster_values)
+                if j == i
+                    cluster[index_j, index_i] = 1
+                end
+            end
+        end
+
+        return cluster
+    end
+
+    """
+        two_way_clustered_sterrs(cluster::Matrix, X::Matrix, Y::Vector, β::Vector)
+
+    This function computes the variance-covariance matrix of regressors contained in `X`, with their associated coefficients `β`. The formula comes from 
+    Cameron et al. (2011). In particular, we use equations `(2.5)` and `(2.8)` and create the "cluster matrix", a `N`x`N` (where `N` is the number of obs. in each specification) indicator matrix with *ij*th entry equal to one
+    if observations *i* and *j* share any cluster (country and region-year), and 0 if not.
+    """
+    function two_way_clustered_sterrs(cluster::Matrix, X::Matrix, Y::Vector, β::Vector)    
+
+        #predicted error
+        u = Y - X*β
+        #term in the middle of var formula
+        B = X'*(u*u' .* cluster)*X
+        #full variance of β. The position of each regressor in the variance remains unchanged.
+        return inv(X'*X)*(B)*inv(X'*X)
+
+    end
+
+    """
+        check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
+
+    Given a `DataFrame` and the base specification of `Table 2`, this function computes the OLS coefficients and associated standard errors.
+    Accepts other regressors (i.e. those in all columns but `column 1`), which must be passed as an array.
+    It returns a dict with two keys: Julia and Stata. Suppose there are `K` regressors per specification. Each key maps to a dict containing `K` 
+    other dicts, each one associated with a regressor containing two key-value pairs: the OLS coefficient and the standard error.
+
+    # Examples
+    ```
+    ols_coeff_wtempoorcountry = col2["julia"]["wtem_initxtilegdp1"]["coeff"]
+    -1.6551452111665383
+
+    sterr_wtempoorcountry = col2["stata"]["wtem_initxtilegdp1"]["st. error"]
+    0.45663109132426655
+    ```
+    """
+    function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
+
+        RY_vars = names(df_julia[:, r"RY"])
+        CNTRY_vars = names(df_julia[:, r"cntry_"])
+
+        all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi", "parent", "regionyear"],RY_vars, CNTRY_vars, other_regressors))
+        dropmissing!(all_varsJ)
+
+        #we cluster at parent level first, so need to keep track of those observations.
+        remaining_parents = all_varsJ.parent
+        remaining_regionyear = all_varsJ.regionyear
+        select!(all_varsJ, Not(:parent))
+        select!(all_varsJ, Not(:regionyear)) 
+        all_varsJ[!, :const] .= 1
+
+        #keep track of where each regressor is located (used when columns change with the QR function)
+        col_corr = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
+
+        #create a matrix of regressors, generate OLS coefficients
+        x_colli = Matrix(select(all_varsJ, vcat([var for var in names(all_varsJ) if var != "g_lngdpwdi"])))
+        XJ, find_regressor_pos = qr_method(x_colli, columns = col_corr)
+        YJ = Vector(all_varsJ.g_lngdpwdi) 
+        coeffsJ = inv(XJ'*XJ)*XJ'*YJ
+                
+        #generate the cluster dummy matrices and compute standard error.
+        twoway_cluster = create_cluster(YJ, Vector(remaining_parents)) .+ create_cluster(YJ, Vector(remaining_regionyear)) - (create_cluster(YJ, Vector(remaining_parents)) .* create_cluster(YJ, Vector(remaining_regionyear)))
+        covarsJ = two_way_clustered_sterrs(twoway_cluster, XJ, YJ, coeffsJ)
+        
+        #the two way clustering method can result in some negative variances. we thus simply report the variance if that is the case. any st. error value in the dict with a negative number is thus non-interpretable.
+        sterrs = [ var > 0 ? sqrt(var) : var for var in diag(covarsJ) ]
+
+        #create a dict for easy access to each regressor.
+        coeffs_dictJ = Dict( value => Dict("coeff" => coeffsJ[find_regressor_pos[value]], "st. error" => sterrs[find_regressor_pos[value]]) for value in keys(find_regressor_pos) )
+
+        ### We do the same on the stata dataset to check if there are data differences between julia and stata.
+
+        all_varsS = select(df_stata, vcat(["wtem", "g", "parent", "regionyear"], RY_vars, CNTRY_vars, other_regressors))
+        dropmissing!(all_varsS)
+
+        remaining_parentsS = all_varsS.parent
+        remaining_regionyearS = all_varsS.regionyear
+        select!(all_varsS, Not(:parent))
+        select!(all_varsS, Not(:regionyear)) 
+        all_varsS[!, :const] .= 1
+
+        col_corrS = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsS) if var != "g"]))
+        xs_colli = Matrix(select(all_varsS, vcat([var for var in names(all_varsS) if var != "g"])))
+        XS, find_regressor_posS = qr_method(xs_colli, columns = col_corrS)
+        YS = Vector(all_varsS.g)
+        coeffsS = inv(XS'*XS)*XS'*YS
+        twoway_clusterS = create_cluster(YS, Vector(remaining_parentsS)) .+ create_cluster(YS, Vector(remaining_regionyearS)) - (create_cluster(YS, Vector(remaining_parentsS)) .* create_cluster(YS, Vector(remaining_regionyearS)))
+        covarsS = two_way_clustered_sterrs(twoway_clusterS, XS, YS, coeffsS)
+        sterrsS = [ var > 0 ? sqrt(var) : var for var in diag(covarsS) ]
+        coeffs_dictS = Dict( value => Dict("coeff" => coeffsS[find_regressor_posS[value]], "st. error" => sterrsS[find_regressor_posS[value]]) for value in keys(find_regressor_posS) )
+
+        #check manually for differences.
+        for (dataset, info) in Dict("Julia" => ["climate_panel_csv.csv", coeffs_dictJ],
+                                        "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
+            for var in ["wtem", "const", "RY13X_SEAS"]
+                println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
+            end
+        end
+
+        println("\n")
+
+        return Dict("julia" => coeffs_dictJ, "stata" => coeffs_dictS)
+
+    end
+
+        make_table2("climate_panel_csv.csv")
 
 end
 
