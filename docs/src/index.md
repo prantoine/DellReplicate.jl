@@ -2,7 +2,10 @@
 CurrentModule = DellReplicate
 ```
 
-# DellReplicate.jl
+# DellReplicate.jl index
 
-Documentation for [DellReplicate](https://github.com/prantoine/DellReplicate.jl).
+All functions for [DellReplicate](https://github.com/prantoine/DellReplicate.jl).
+
+```@index
+```
 

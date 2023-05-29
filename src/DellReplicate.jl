@@ -130,8 +130,7 @@ module DellReplicate
     function figure1_visualise_graph2(df_name::String)
         
         df_ready_for_fig = figure1_data_cleaner(df_name)
-        println(names(df_ready_for_fig))
-        p1 = @df df_ready_for_fig plot(size=(800,600),titlefont=font(18, :red, :left, :bold, 1.1))
+        p1 = @df df_ready_for_fig plot(size=(800,600))
         sub_df_array = [ collect(df_ready_for_fig[row_ind, [:wpremin, :wpremax, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(df_ready_for_fig))]
         
         mins = [ row[1] for row in sub_df_array ]
@@ -161,7 +160,8 @@ module DellReplicate
         xlabel!("Log per-capita GDP in 2000")
         title!("Precipitation\nWeighted by population", )
 
-        display(p1)
+        savefig(p1, "fig1_graph2.png")
+
     end
 
     """
@@ -188,7 +188,7 @@ module DellReplicate
         country = [ row[6] for row in test ]
 
         # create a scatter plot with vertical ranges
-        p1 = plot(size=(800,600),titlefont=font(18, :red, :left, :bold, 1.1))
+        p1 = plot(size=(800,600))
         for i in 1:size(test)[1]
             if !ismissing(lngdp[i])
             plot!([lngdp[i],lngdp[i]],[mins[i], maxs[i]], color=:grey, linewidth=1.3, label="")
@@ -210,8 +210,8 @@ module DellReplicate
         ylabel!("Degrees") 
         xlabel!("Log per-capita GDP in 2000")
         title!("Temperature\nWeighted by population", )
-        #display(p1)
-        figure1_visualise_graph2(df_name)
+
+        savefig(p1, "fig1_graph1.png")
 
     end
 
@@ -229,6 +229,11 @@ module DellReplicate
     
     end
 
+    """
+        keep_20yrs_gdp(df::DataFrames.DataFrame)
+    
+    Given a `DataFrame`, check if for any country, we have less than 20 years of GDP growth data. If so, drop the country from the dataframe.
+    """
     function keep_20yrs_gdp(df::DataFrames.DataFrame)
         
         df[!, :nonmissing] .= ifelse.(ismissing.(df.g_lngdpwdi), 0, 1)
@@ -279,6 +284,11 @@ module DellReplicate
 
     end
 
+    """
+        gen_year_vars(df::DataFrames.DataFrame)
+
+    This function follows uses loops extensively to generate interaction variables between region and year, as well as dummy variables for each year in the dataset.
+    """
     function gen_year_vars(df::DataFrames.DataFrame)
         
         numyears = maximum([ size(subfd)[1] for subfd in groupby(df, :fips60_06)] ) - 1
@@ -304,6 +314,12 @@ module DellReplicate
 
     end
 
+    """
+        gen_xtile_vars(climate_panel::DataFrames.DataFrame)
+    
+    This function creates copies of the `DataFrame` and dummy variables classifying each country as poor or rich as well as less/more hot.
+    Returns a merged `DataFrame` with the new columns.
+    """
     function gen_xtile_vars(climate_panel::DataFrames.DataFrame)
 
         temp1 = copy(climate_panel)
@@ -728,7 +744,8 @@ module DellReplicate
 
     end
 
-        make_table2("climate_panel_csv.csv")
+        figure1_visualise_graph2("climate_panel_csv.csv")
+        #make_table2("climate_panel_csv.csv")
 
 end
 
