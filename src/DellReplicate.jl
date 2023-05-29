@@ -506,6 +506,12 @@ module DellReplicate
         pretty_table(table2)
     end
 
+    """
+        make_table2(raw_df_name::String)
+
+    The "master" function used to store OLS coefficients and standard errors from `Table 2` in the paper. Performs various data cleaning actions and relies on the same
+    functions as `make_table1()` to generate the variables. 
+    """
     function make_table2(raw_df_name::String)
         climate_panel = read_csv(raw_df_name)
 
@@ -547,14 +553,14 @@ module DellReplicate
             filter_transform!(climate_panel, Symbol(var) => ==(1), :region => (b -> (b = var)) => :region )
         end
         
-        #second cluster
+        #second cluster variable
         climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
 
         #dummies: 1 for each country
         countries = unique(climate_panel[:, :fips60_06])
         transform!(groupby(climate_panel, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries)) 
 
-        #climate_panel_b4reg is the state of the data in stata right before running the first regression
+        #climate_panel_b4reg is the state of the data in stata right before running the first regression and will be used for comparison purposes.
         climate_panel2 = read_csv("climate_panel_b4reg.csv")
         transform!(groupby(climate_panel2, [:fips60_06, :year]), @. :fips60_06 => ByRow(isequal(countries)) .=> Symbol(:cntry_, countries))
 
@@ -572,37 +578,40 @@ module DellReplicate
 
         #fifth column (to drop: country BF)
         col5 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
-        println("Coeff for wpre is $(col5["julia"]["wtem_initxtilegdp1"]) for julia and $(col5["stata"]["wtem_initxtilegdp1"]) for stata")
+
     end
 
 
     """
         qr_method(X::Matrix; columns::Dict)
     Returns a new matrix of regressors free of collinearity issues (i.e. full rank matrix) using the QR method as described by Engler (1997).
-    Also returns a dictionnary with the name of the regressor as a key and its new position in the regressors matrix as a value.
+    Also returns a dictionnary with the name of the regressor as a key and its new position in the regressors matrix as a value, from the dict `columns` which 
+    maps an old position to a regressor name. Note that the `new_correspondance` dict can also be used to retrieve standard errors (done later in the code).
     """
     function qr_method(X::Matrix; columns::Dict)
 
 
-        x_pivot = qr(X, ColumnNorm())
+        x_qr = qr(X, ColumnNorm())
         
-        #info on the reordering of the columns: x_pivot.p (vector !)
-        columns_to_keep = x_pivot.p[1: rank(X)]
+        #info on the reordering of the columns: x_qr.p (vector !)
+        columns_to_keep = x_qr.p[1: rank(X)]
         noncoli_regs = X[:, columns_to_keep]
 
-        #iterate over a dict which maps each old position to the new one
         # the new_correspondance takes a regressor name as a key, and returns its new position in the non-collinear regressors Matrix as a value.
-        #println(pairs(IndexLinear(), columns_to_keep))
         new_correspondance = Dict(columns[old_pos] => new_pos for (old_pos,new_pos) in Dict(value => index for (index,value) in enumerate(columns_to_keep)))
-        #println(columns_to_keep)
 
         return noncoli_regs, new_correspondance
 
     end
 
+    """
+        create_cluster(Y::Vector, cluster_values::Vector)
+    
+    Generates a `size(Y)`x`size(Y)` matrix of indicator variables equal to `1` if observation *i* and *j* share the same cluster value.
+    The `cluster_value` parameter accepts vectors of the same size as `Y`. 
+    """
     function create_cluster(Y::Vector, cluster_values::Vector)
 
-        #now need to create clusters
         cluster = zeros(Int64, size(Y)[1], size(Y)[1])
         for (index_j,j) in enumerate(cluster_values)
             for (index_i,i) in enumerate(cluster_values)
@@ -615,117 +624,110 @@ module DellReplicate
         return cluster
     end
 
-    function two_way_clustered_sterrs(c_cluster::Matrix, ry_cluster::Matrix, twoway_cluster::Matrix, X::Matrix, Y::Vector, β::Vector, n_countries::Array, n_regionyear::Array)    
+    """
+        two_way_clustered_sterrs(cluster::Matrix, X::Matrix, Y::Vector, β::Vector)
 
-        u_countries = zeros(size(n_countries)[1] ,1)
-        #c = Vector(length(n_countries), 1) 
-
-        c_countries_vals = n_countries ./ (n_countries .- 1)
-        c_countries = vcat([ fill(val, n_countries[index]) for (index,val) in enumerate(c_countries_vals) ]...)
-
-        c_regionyear_vals = n_regionyear ./ (n_regionyear .- 1)
-        for (index,val) in enumerate(c_regionyear_vals)
-            if val == Inf
-                c_regionyear_vals[index] = 2
-            end
-        end
-        c_regionyear = vcat([ fill(val, n_regionyear[index]) for (index,val) in enumerate(c_regionyear_vals) ]...)
-
-        u = Y - X*β
-        println(size(u), size(sqrt.(c_countries)))
-        u_countries = u .* sqrt.(c_countries)
-        u_regionyear = u .* sqrt.(c_regionyear)
+    This function computes the variance-covariance matrix of regressors contained in `X`, with their associated coefficients `β`. The formula comes from 
+    Cameron et al. (2011). In particular, we use equations `(2.5)` and `(2.8)` and create the "cluster matrix", a `N`x`N` (where `N` is the number of obs. in each specification) indicator matrix with *ij*th entry equal to one
+    if observations *i* and *j* share any cluster (country and region-year), and 0 if not.
+    """
+    function two_way_clustered_sterrs(cluster::Matrix, X::Matrix, Y::Vector, β::Vector)    
 
         #predicted error
-        println("The size of u is $(size(u))")
-
+        u = Y - X*β
         #term in the middle of var formula
-        B_c = X'*(u_countries*u_countries' .* c_cluster)*X
-        B_ry = X'*(u_regionyear*u_regionyear' .* ry_cluster)*X
-        B_inter = X'*(u*u' .* twoway_cluster)*X
-        #B = X'*(u*u' .* cluster)*X
-
-        #full variance of β. The position of each regressor in the variance and the coefficient vectors should remain unchanged.
-        return inv(X'*X)*(B_c)*inv(X'*X) + inv(X'*X)*(B_ry)*inv(X'*X) - inv(X'*X)*(B_inter)*inv(X'*X)
+        B = X'*(u*u' .* cluster)*X
+        #full variance of β. The position of each regressor in the variance remains unchanged.
+        return inv(X'*X)*(B)*inv(X'*X)
 
     end
 
-
     """
         check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
-    Given a `DataFrame` and the base specification of `Table 2`, this function prints the OLS coefficients for the reported regressors.
+
+    Given a `DataFrame` and the base specification of `Table 2`, this function computes the OLS coefficients and associated standard errors.
+    Accepts other regressors (i.e. those in all columns but `column 1`), which must be passed as an array.
+    It returns a dict with two keys: Julia and Stata. Suppose there are `K` regressors per specification. Each key maps to a dict containing `K` 
+    other dicts, each one associated with a regressor containing two key-value pairs: the OLS coefficient and the standard error.
+
+    # Examples
+    ```
+    ols_coeff_wtempoorcountry = col2["julia"]["wtem_initxtilegdp1"]["coeff"]
+    -1.6551452111665383
+
+    sterr_wtempoorcountry = col2["stata"]["wtem_initxtilegdp1"]["st. error"]
+    0.45663109132426655
+    ```
     """
     function check_coeffs_table2(df_julia::DataFrames.DataFrame, df_stata::DataFrames.DataFrame; other_regressors)
 
         RY_vars = names(df_julia[:, r"RY"])
         CNTRY_vars = names(df_julia[:, r"cntry_"])
+
         all_varsJ = select(df_julia, vcat(["wtem", "g_lngdpwdi", "parent", "regionyear"],RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsJ)
 
         #we cluster at parent level first, so need to keep track of those observations.
-        #remaining_parents = convert.(String, all_varsJ.fips60_06)
         remaining_parents = all_varsJ.parent
         remaining_regionyear = all_varsJ.regionyear
         select!(all_varsJ, Not(:parent))
         select!(all_varsJ, Not(:regionyear)) 
         all_varsJ[!, :const] .= 1
 
-        #assign each regressor column to a name
+        #keep track of where each regressor is located (used when columns change with the QR function)
         col_corr = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
-        col_corr_val = Dict(value => index for (index, value) in enumerate([var for var in names(all_varsJ) if var != "g_lngdpwdi"]))
 
-        #create a matrix of regressors
+        #create a matrix of regressors, generate OLS coefficients
         x_colli = Matrix(select(all_varsJ, vcat([var for var in names(all_varsJ) if var != "g_lngdpwdi"])))
         XJ, find_regressor_pos = qr_method(x_colli, columns = col_corr)
         YJ = Vector(all_varsJ.g_lngdpwdi) 
-
-        #element 1 of coeffsJ corresponds to column 1 of regressors matrix. therefore we can access a specific coeff like so, for wtem: coeffsJ[find_regressor_pos["wtem]]
         coeffsJ = inv(XJ'*XJ)*XJ'*YJ
                 
-        #broadcast necessary since we compare individual dummies.
-        country_cluster = create_cluster(YJ, Vector(remaining_parents))
-        regionyear_cluster = create_cluster(YJ, Vector(remaining_regionyear))
+        #generate the cluster dummy matrices and compute standard error.
         twoway_cluster = create_cluster(YJ, Vector(remaining_parents)) .+ create_cluster(YJ, Vector(remaining_regionyear)) - (create_cluster(YJ, Vector(remaining_parents)) .* create_cluster(YJ, Vector(remaining_regionyear)))
+        covarsJ = two_way_clustered_sterrs(twoway_cluster, XJ, YJ, coeffsJ)
+        
+        #the two way clustering method can result in some negative variances. we thus simply report the variance if that is the case. any st. error value in the dict with a negative number is thus non-interpretable.
+        sterrs = [ var > 0 ? sqrt(var) : var for var in diag(covarsJ) ]
 
-        n_clusters_countries = hcat([[i, count(==(i), Array(remaining_parents))] for i in unique(Array(remaining_parents))]...)[2,:]
-        n_clusters_regionyear = hcat([[i, count(==(i), Array(remaining_regionyear))] for i in unique(Array(remaining_regionyear))]...)[2,:]
-        n_clusters_intersection = hcat([[i, count(==(i), Array(remaining_parents) .* Array(remaining_regionyear))] for i in unique(Array(remaining_parents) .* Array(remaining_regionyear))]...)[2,:]
+        #create a dict for easy access to each regressor.
+        coeffs_dictJ = Dict( value => Dict("coeff" => coeffsJ[find_regressor_pos[value]], "st. error" => sterrs[find_regressor_pos[value]]) for value in keys(find_regressor_pos) )
 
-        #follow the steps from the paper. first create the \hat{b} variable X'(uu'*twoway_cluster)X where u = Y - Xβ.
-        varsJ = two_way_clustered_sterrs(country_cluster, regionyear_cluster, twoway_cluster, XJ, YJ, coeffsJ, n_clusters_countries, n_clusters_regionyear)
-        test = diag(varsJ)
-        println(test[1])
+        ### We do the same on the stata dataset to check if there are data differences between julia and stata.
 
-        return
-
-        coeffs_dictJ = Dict( value => coeffsJ[find_regressor_pos[value]] for value in keys(find_regressor_pos) )
-
-        all_varsS = select(df_stata, vcat(["wtem", "g"], RY_vars, CNTRY_vars, other_regressors))
+        all_varsS = select(df_stata, vcat(["wtem", "g", "parent", "regionyear"], RY_vars, CNTRY_vars, other_regressors))
         dropmissing!(all_varsS)
+
+        remaining_parentsS = all_varsS.parent
+        remaining_regionyearS = all_varsS.regionyear
+        select!(all_varsS, Not(:parent))
+        select!(all_varsS, Not(:regionyear)) 
         all_varsS[!, :const] .= 1
 
         col_corrS = Dict(index => value for (index, value) in enumerate([var for var in names(all_varsS) if var != "g"]))
-
         xs_colli = Matrix(select(all_varsS, vcat([var for var in names(all_varsS) if var != "g"])))
         XS, find_regressor_posS = qr_method(xs_colli, columns = col_corrS)
         YS = Vector(all_varsS.g)
-
         coeffsS = inv(XS'*XS)*XS'*YS
-        coeffs_dictS = Dict( value => coeffsS[find_regressor_posS[value]] for value in keys(find_regressor_posS) )
+        twoway_clusterS = create_cluster(YS, Vector(remaining_parentsS)) .+ create_cluster(YS, Vector(remaining_regionyearS)) - (create_cluster(YS, Vector(remaining_parentsS)) .* create_cluster(YS, Vector(remaining_regionyearS)))
+        covarsS = two_way_clustered_sterrs(twoway_clusterS, XS, YS, coeffsS)
+        sterrsS = [ var > 0 ? sqrt(var) : var for var in diag(covarsS) ]
+        coeffs_dictS = Dict( value => Dict("coeff" => coeffsS[find_regressor_posS[value]], "st. error" => sterrsS[find_regressor_posS[value]]) for value in keys(find_regressor_posS) )
 
+        #check manually for differences.
         for (dataset, info) in Dict("Julia" => ["climate_panel_csv.csv", coeffs_dictJ],
                                         "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
             for var in ["wtem", "const", "RY13X_SEAS"]
                 println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
             end
         end
+
         println("\n")
+
         return Dict("julia" => coeffs_dictJ, "stata" => coeffs_dictS)
 
     end
 
-        #figure2_visualise("climate_panel_csv.csv")                     
-        #figure1_visualise_graph1("climate_panel_csv.csv")
         make_table2("climate_panel_csv.csv")
 
 end
