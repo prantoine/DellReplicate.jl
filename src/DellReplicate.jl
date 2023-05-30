@@ -9,6 +9,7 @@ module DellReplicate
     using Plots
     using StatsPlots
     using Logging
+    using CovarianceMatrices
     using PrettyTables
     using StatsModels
     using GLM
@@ -22,11 +23,10 @@ module DellReplicate
     Returns the modified version of input `df`.
     """
     function gen_vars_fig1!(df)
-
-        
+  
         df2 = df[(df[!, :year] .>= 1950) .& (df[!, :year] .<= 1959), :]
         df3 = df[(df[!, :year] .>= 1996) .& (df[!, :year] .<= 2005), :]
-
+        
         for var in [:wtem, :wpre]
             
             df = transform(groupby(df, :parent), var => maximum => "$(var)max")
@@ -75,7 +75,11 @@ module DellReplicate
             return nothing
         end
 
-        return CSV.read(joinpath(pwd(), fn), DataFrame)
+        result = CSV.read(joinpath(pwd(), fn), DataFrame)
+
+        
+        cd("..")
+        return result
 
     end
 
@@ -299,7 +303,7 @@ module DellReplicate
 
         #dummies: 1 for each year
         transform!(groupby(temp_df, [:fips60_06, :year]), @. :year => ByRow(isequal(1949+unique_years)) .=> Symbol(:yr_, unique_years))
-
+        
         for year in unique_years
             if year != 54
                 for region in region_vars
@@ -310,8 +314,48 @@ module DellReplicate
         end
         
 
+        println(temp_df[(temp_df[!, :fips60_06] .== "KS"), [:fips60_06, :year, :RYPX1, :RYPX7]])
+        println(size(temp_df))
         return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
+    end
+
+    function HCE(df::DataFrame, y::String, x::String)
+        # Extract the response vector y and the covariate(s) x from the dataframe
+        Y_ = df[:, Symbol(y)]
+        X_ = df[:, Symbol.(x)]
+        formula = Term(Symbol(y)) ~ ConstantTerm(1) + Term(Symbol(x))
+
+        # Create the design matrix X by concatenating a column of ones with the covariate(s)
+        X = hcat(ones(length(Y_)), X_)
+        # Fit the linear regression model
+        
+        ols1 = lm(formula, df)
+
+        # Compute the predicted values
+        y_hat = X * coef(ols1)
+
+        # Compute the residuals
+        residuals = vec(Y_ .- y_hat)
+
+        # Compute the hat matrix (X * (X'X)^(-1)X')
+        hat_matrix = X * inv(X' * X) * X'
+
+        # Compute the squared residuals weighted by the hat matrix
+        squared_residuals = residuals.^ 2
+        weighted_residuals = squared_residuals ./ (1 .- diag(hat_matrix))
+
+        # Compute the variance-covariance matrix of the coefficients
+        robust_se = inv(X' * X) * X' * Diagonal(weighted_residuals) * X * inv(X' * X)
+
+        # Extract the standard errors for the coefficients
+        coefficient_se = sqrt.(diag(robust_se))
+        
+        # Return the standard errors of the fitted values
+        #Here is the error
+        se_fit = sqrt.(diag(X *robust_se* X'))
+
+        return coefficient_se, y_hat, se_fit
     end
 
     """
@@ -389,24 +433,166 @@ module DellReplicate
        # growth Lags for lnag lnind lngdpwdi lninvest 
         transform!(groupby(climate_panel, :fips60_06), [ :lnag, :lnind, :lngdpwdi, :lninvest ] .=> lag)
 
-        for var in [ :ag, :ind, :gdpwdi, :invest ]
-            climate_panel[!, "g$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+        for var in [ :lnag, :lnind, :lngdpwdi, :lninvest ]
+            #climate_panel[!, "g_$(var)"] .= ( climate_panel[:,"ln$var"] .- climate_panel[:,"ln$(var)_lag"] ) .* 100
+            growth_var!(climate_panel, var)
         end
 
         # Drop if less than 20 years of GDP values
         climate_panel = keep_20yrs_gdp(climate_panel)
-        #climate_panel = climate_panel[(climate_panel[!, :nonmissing_sum_skipmissing] .>= 20), :]       
         climate_panel = gen_xtile_vars(climate_panel)
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
-        
+
         #a few duplicates are created here.
 
         #CODES: 999 IF MISSING BIN
+        #gen mean temps reminder g = g_lngdpwdi
+        
+        temp_df = Dict()
+
+        for (period, year) in Dict("50s" => [1951, 1960],
+                             "60s" => [1961, 1970],
+                             "70s" => [1971, 1980],
+                             "80s" => [1981, 1990],
+                             "90s" => [1991, 2000],
+                             "00s" => [1994, 2003],
+                             "84s" => [1984, 1993],
+                             "64s" => [1964, 1973],
+                             "7085" => [1970, 1985],
+                             "8600" => [1986, 2000],
+                             "7086" => [1970, 1986],
+                             "8703" => [1987, 2003],
+                             "7087" => [1970, 1987],
+                             "8803" => [1988, 2003]
+                            )
+
+        temp_df[period] =   combine(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06),
+                            [name for name in names(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06))
+                            if name ∉ ["year", "fips60_06"]] .=> mean∘skipmissing .=> Symbol.(:temp, period,
+                            [name for name in names(groupby(subset(select(climate_panel, ["year", "fips60_06", "wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]), :year => ByRow(>=(year[1])), :year => ByRow(<=(year[2]))), :fips60_06))
+                            if name ∉ ["year", "fips60_06"]])) 
+
+        # In the dofile, the second `mean` command is simply used to fill all missing values with the just-computed value.
+        # Here we will perform a many to many merge, so values will naturally expand. Therefore we do not need to do anything else.
+        
+        end
+
+        for (k,v) in temp_df
+            climate_panel = outerjoin(climate_panel, v, on = :fips60_06)
+        end
+        
+        #Non working version, although it looks cooler
+        #@. climate_panel = outerjoin.(climate_panel, values(temp_df), on = :fips60_06)
+
+            
+            for var in ["wtem", "wpre", "g_lngdpwdi", "g_lngdppwt", "g_lnag", "g_lnind", "g_lninvest"]
+            for (period, year) in Dict("00" => ["50s", "60s", "64s", "70s", "80s", "90s"],
+                                    "90" => ["50s", "60s", "70s", "80s"],
+                                    "84" => ["50s", "60s", "70s", "80s", "90s"]
+                                    ) 
+
+                for y in year
+                    climate_panel[!, Symbol(:change, period , y, var)] .= climate_panel[:, Symbol(:temp, y, var)] .- climate_panel[:, Symbol(:temp, period, "s", var)]
+                end
+
+            end
+
+            #for var wtem wpre g gpwt gag gind ginvest : g changeS1X = mean8600X - mean7085X 
+             #   for var wtem wpre g gpwt gag gind ginvest : g changeS2X = mean8703X - mean7086X 	
+              #  for var wtem wpre g gpwt gag gind ginvest : g changeS3X = mean8803X - mean7087X 
+              climate_panel[!, Symbol(:changeS1, var)] .= climate_panel[:, Symbol(:temp8600, var)] .- climate_panel[:, Symbol(:temp7085, var)]
+              climate_panel[!, Symbol(:changeS2, var)] .= climate_panel[:, Symbol(:temp8703, var)] .- climate_panel[:, Symbol(:temp7086, var)]
+              climate_panel[!, Symbol(:changeS3, var)] .= climate_panel[:, Symbol(:temp8803, var)] .- climate_panel[:, Symbol(:temp7087, var)]
+
+            end
+
+            for var in [ name for name in names(climate_panel) if occursin("change", name) ]
+            #println(var)
+            end
+            # Kepp only 2003 
+
+            ols_temp_1 = filter(:year => ==(2003), climate_panel)
+            # Keep if initxgdpxtile1 == 1
+            ols_temp_1 = dropmissing(ols_temp_1, :initgdpxtile1)
+            ols_temp_1 = filter(:initgdpxtile1 => ==(1),ols_temp_1)
+
+            
+            # Extract the standard errors for the coefficients
+            coefficient_se_1 = HCE(ols_temp_1, "changeS1g_lngdpwdi", "changeS1wtem" )
+            
+            c_plus_1 = coefficient_se_1[2]+ 1.96 * coefficient_se_1[3]
+            c_minus_1 = coefficient_se_1[2] - 1.96 * coefficient_se_1[3]
+            
+            
+            
+            p = scatter(ols_temp_1[:,:changeS1wtem], ols_temp_1[:,:changeS1g_lngdpwdi], legend=false)
+            
+            for i in 1:length(ols_temp_1[:,:changeS1wtem])
+                annotate!(ols_temp_1[:,:changeS1wtem][i], ols_temp_1[:,:changeS1g_lngdpwdi][i], text(ols_temp_1[:,:country_code][i], :left, 8, :black))
+            end
+            # Add a line plot for the fitted values
+            plot!(ols_temp_1[:,:changeS1wtem], coefficient_se_1[2], linewidth=2)
+            # Add the confidence interval
+            Minus = hcat(c_minus_1,ols_temp_1[:,:changeS1wtem])
+            Plus = hcat(c_plus_1,ols_temp_1[:,:changeS1wtem])
+            plot!(sort(ols_temp_1[:,:changeS1wtem]), Minus[sortperm(Minus[:,2]),:][:,1], color=:blue)
+            plot!(sort(ols_temp_1[:,:changeS1wtem]), Plus[sortperm(Plus[:,2]),:][:,1], color=:blue)
+            
+            # Add a dashed line at y = 0
+            hline!(p, [0], linestyle=:dash, color=:black)
+
+            xlims!(-0.5, 1)
+            ylims!(-10, 10)
+            # Label the axes
+            xlabel!("Change in temperature")
+            ylabel!("Change in growth")
+            # Set the plot title
+            title!("A. Poor countries")
+            
+
+           
+
+            ols_temp_2 = filter(:year => ==(2003), climate_panel)
+            # Keep if initxgdpxtile1 == 1
+            ols_temp_2 = dropmissing(ols_temp_2, :initgdpxtile1)
+            ols_temp_2 = filter(:initgdpxtile1 => !=(1),ols_temp_2)
+
+            # Compute the robust standard errors
+            coefficient_se_2 = HCE(ols_temp_2, "changeS1g_lngdpwdi", "changeS1wtem" )
+            #print("les std sont : $coefficient_se_2")
+            c_plus_2 = coefficient_se_2[2]+ 1.96 * coefficient_se_2[3]
+            c_minus_2 = coefficient_se_2[2] - 1.96 * coefficient_se_2[3]
+            
+            p2 = scatter(ols_temp_2[:,:changeS1wtem], ols_temp_2[:,:changeS1g_lngdpwdi], legend=false)
+            
+            for i in 1:length(ols_temp_2[:,:changeS1wtem])
+                annotate!(ols_temp_2[:,:changeS1wtem][i], ols_temp_2[:,:changeS1g_lngdpwdi][i], text(ols_temp_2[:,:country_code][i], :left, 8, :black))
+            end
+            # Add a line plot for the fitted values
+            plot!(ols_temp_2[:,:changeS1wtem], coefficient_se_2[2], linewidth=2)
+            # Add the confidence interval
+            Minus2 = hcat(c_minus_2,ols_temp_2[:,:changeS1wtem])
+            Plus2 = hcat(c_plus_2,ols_temp_2[:,:changeS1wtem])
+            plot!(sort(ols_temp_2[:,:changeS1wtem]), Minus2[sortperm(Minus2[:,2]),:][:,1], color=:blue)
+            plot!(sort(ols_temp_2[:,:changeS1wtem]), Plus2[sortperm(Plus2[:,2]),:][:,1], color=:blue)
+            
+            # Add a dashed line at y = 0
+            hline!(p2, [0], linestyle=:dash, color=:black)
+            xlims!(-0.5, 1.5)
+            ylims!(-10, 10)
+            # Label the axes
+            xlabel!("Change in temperature")
+            ylabel!("Change in growth")
+            # Set the plot title
+            title!("B. Rich countries")
+            
+            fig2 = plot(p, p2, layout = (2, 1), size = (800, 600))
+            display(fig2)
+           
 
     end
 
-    #figure2_visualise("climate_panel_csv.csv")
 
     """
         make_table_1(raw_df_name::String)
@@ -558,7 +744,7 @@ module DellReplicate
         for var in ["_MENA", "_SSAF", "_LAC", "_WEOFF", "_EECA", "_SEAS" ]
             filter_transform!(climate_panel, Symbol(var) => ==(1), :region => (b -> (b = var)) => :region )
         end
-        
+                           
         #second cluster variable
         climate_panel[!, :regionyear] .= climate_panel.region .* string.(climate_panel.year)
 
