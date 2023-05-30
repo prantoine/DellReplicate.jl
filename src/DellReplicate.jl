@@ -603,7 +603,7 @@ module DellReplicate
 
 
     """
-        make_table_1(raw_df_name::String)
+        make_table1(raw_df_name::String)
     
     This function transform the data and produce summary statistics. It returns two `DataFrame` and presents them as pretty tables. The first table, `table1`, shows the proportion of country with temperature above or below country mean with a certain bin, and the second table, `table2`, is giving the same information about the precipation with 100mm units for the thresholds. 
     """
@@ -786,14 +786,14 @@ module DellReplicate
         #fifth column
         col5 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
 
-        table2 = DataFrame(Dependent_Variable = ["Temperature", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "", "Precipitation", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "" ],
+        table_coeffs = DataFrame(GDP_growth_rate = ["Temperature", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "", "Precipitation", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "" ],
                            Model1 = [col1["julia"]["wtem"]["coeff"], "($(col1["julia"]["wtem"]["st. error"]))", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
                            Model2 = [col2["julia"]["wtem"]["coeff"], "($(col2["julia"]["wtem"]["st. error"]))", col2["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col2["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", "", "", "", "", "", "", "", "", "", "" ],
                            Model3 = [col3["julia"]["wtem"]["coeff"], "($(col3["julia"]["wtem"]["st. error"]))", col3["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col3["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", "", "", col3["julia"]["wpre"]["coeff"], "($(col3["julia"]["wpre"]["st. error"]))", col3["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col3["julia"]["wpre_initxtilegdp1"]["st. error"]))", "", "", "", "" ],
                            Model4 = [col4["julia"]["wtem"]["coeff"], "($(col4["julia"]["wtem"]["st. error"]))", col4["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col4["julia"]["wtem_initxtilegdp1"]["st. error"]))", col4["julia"]["wtem_initxtilewtem2"]["coeff"], "($(col4["julia"]["wtem_initxtilewtem2"]["st. error"]))", "", "", col4["julia"]["wpre"]["coeff"], "($(col4["julia"]["wpre"]["st. error"]))", col4["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col4["julia"]["wpre_initxtilegdp1"]["st. error"]))", col4["julia"]["wpre_initxtilewtem2"]["coeff"], "($(col4["julia"]["wpre_initxtilewtem2"]["st. error"]))", "", "" ],
                            Model5 = [col5["julia"]["wtem"]["coeff"], "($(col5["julia"]["wtem"]["st. error"]))", col5["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col5["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wtem_initxtileagshare2"]["coeff"], "($(col5["julia"]["wtem_initxtileagshare2"]["st. error"]))", col5["julia"]["wpre"]["coeff"], "($(col5["julia"]["wpre"]["st. error"]))", col5["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col5["julia"]["wpre_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wpre_initxtileagshare2"]["coeff"], "($(col5["julia"]["wpre_initxtileagshare2"]["st. error"]))" ])
 
-        pretty_table(table2)
+        pretty_table(table_coeffs)
 
         @info "End of function make_table2"
 
