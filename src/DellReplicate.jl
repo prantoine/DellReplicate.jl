@@ -517,12 +517,8 @@ module DellReplicate
             display(fig2)
            
 
-    #println(climate_panel[1:200, [:fips60_06, :year, :changeS1wtem, :changeS2wtem, :changeS3wtem]])
-    #println(names(climate_panel))
     end
 
-    #figure2_visualise("climate_panel_csv.csv")
-    
 
     """
         make_table_1(raw_df_name::String)
