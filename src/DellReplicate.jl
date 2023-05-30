@@ -78,7 +78,7 @@ module DellReplicate
         result = CSV.read(joinpath(pwd(), fn), DataFrame)
 
         
-        cd("..")
+        cd("../assets")
         return result
 
     end
@@ -282,7 +282,6 @@ module DellReplicate
                 transform!(groupby(lag_df, :fips60_06), "L$(n_lag-1)$(var)" => lag => "L$(n_lag)$(var)")
             end
         end
-        #we should be at line 137 in the do file here !
 
         return outerjoin(df, lag_df, on=[:fips60_06, :year], makeunique=true)
 
@@ -313,9 +312,6 @@ module DellReplicate
             end
         end
         
-
-        println(temp_df[(temp_df[!, :fips60_06] .== "KS"), [:fips60_06, :year, :RYPX1, :RYPX7]])
-        println(size(temp_df))
         return outerjoin(df, temp_df, on=[:fips60_06, :year], makeunique=true)
 
     end
@@ -444,8 +440,6 @@ module DellReplicate
         climate_panel = gen_lag_vars(climate_panel)
         climate_panel = gen_year_vars(climate_panel)
 
-        #a few duplicates are created here.
-
         #CODES: 999 IF MISSING BIN
         #gen mean temps reminder g = g_lngdpwdi
         
@@ -514,8 +508,8 @@ module DellReplicate
 
             ols_temp_1 = filter(:year => ==(2003), climate_panel)
             # Keep if initxgdpxtile1 == 1
-            ols_temp_1 = dropmissing(ols_temp_1, :initgdpxtile1)
-            ols_temp_1 = filter(:initgdpxtile1 => ==(1),ols_temp_1)
+            ols_temp_1 = dropmissing(ols_temp_1, :initxtilegdp1)
+            ols_temp_1 = filter(:initxtilegdp1 => ==(1),ols_temp_1)
 
             
             # Extract the standard errors for the coefficients
@@ -551,12 +545,10 @@ module DellReplicate
             title!("A. Poor countries")
             
 
-           
-
             ols_temp_2 = filter(:year => ==(2003), climate_panel)
             # Keep if initxgdpxtile1 == 1
-            ols_temp_2 = dropmissing(ols_temp_2, :initgdpxtile1)
-            ols_temp_2 = filter(:initgdpxtile1 => !=(1),ols_temp_2)
+            ols_temp_2 = dropmissing(ols_temp_2, :initxtilegdp1)
+            ols_temp_2 = filter(:initxtilegdp1 => !=(1),ols_temp_2)
 
             # Compute the robust standard errors
             coefficient_se_2 = HCE(ols_temp_2, "changeS1g_lngdpwdi", "changeS1wtem" )
@@ -588,7 +580,7 @@ module DellReplicate
             title!("B. Rich countries")
             
             fig2 = plot(p, p2, layout = (2, 1), size = (800, 600))
-            display(fig2)
+            savefig(fig2, "fig2.png")
            
 
     end
@@ -597,7 +589,7 @@ module DellReplicate
     """
         make_table_1(raw_df_name::String)
     
-    This function transform the data and produce summary statistics. It returns two `DataFrame` and presents them as pretty tables. The first table, `table1`, shows the proportion of country with temperature above or below country mean with a certain bin, and the second table, `table2`, is giving the same information about the precipation with 100mm units for the tresholds. 
+    This function transform the data and produce summary statistics. It returns two `DataFrame` and presents them as pretty tables. The first table, `table1`, shows the proportion of country with temperature above or below country mean with a certain bin, and the second table, `table2`, is giving the same information about the precipation with 100mm units for the thresholds. 
     """
     function make_table1(raw_df_name::String)
 
@@ -606,8 +598,6 @@ module DellReplicate
 
         #Keep only year inferior or equal to 2003
         filter!(:year => <=(2003), climate_panel)
-
-        
 
         sort!(climate_panel, [:fips60_06, :year])
 
@@ -682,7 +672,7 @@ module DellReplicate
         end
         table1 = DataFrame(Statistic= ["Raw Data","Without year FE"], Quarter = [a[1], b[1]], Half = [a[2], b[2]], ThreeQuarter = [a[3], b[3]], One = [a[4], b[4]], One_and_quarter = [a[5],b[5]], One_and_half=[a[6], b[6]])
         # Display the table with pkg PrettyTables.jl
-        pretty_table(table1)
+        pretty_table(table1, backend = Val(:html))
 
         # This part is for the second table
         # Creating two arrays to store the statistics
@@ -695,14 +685,15 @@ module DellReplicate
         end
         table2 = DataFrame(Statistic= ["Raw Data","Without year FE"], One = [c[1], d[1]], Two = [c[2], d[2]], Three = [c[3], d[3]], Four = [c[4], d[4]], Five = [c[5],d[5]], Six=[c[6], d[6]])
         # Display the second table
-        pretty_table(table2)
+        pretty_table(table2, backend = Val(:html))
     end
 
     """
         make_table2(raw_df_name::String)
 
     The "master" function used to store OLS coefficients and standard errors from `Table 2` in the paper. Performs various data cleaning actions and relies on the same
-    functions as `make_table1()` to generate the variables. 
+    functions as `make_table1()` to generate the variables. Finally, it constructs a `PrettyTables.pretty_table` object which prints the coeffs and their standard errors in the terminal
+    matching the style of `Table 2` in the paper.
     """
     function make_table2(raw_df_name::String)
         climate_panel = read_csv(raw_df_name)
@@ -768,8 +759,18 @@ module DellReplicate
         #fourth column
         col4 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtilewtem2", "wpre_initxtilewtem2"])
 
-        #fifth column (to drop: country BF)
+        #fifth column
         col5 = check_coeffs_table2(climate_panel, climate_panel2, other_regressors = ["wtem_initxtilegdp1", "wpre", "wpre_initxtilegdp1", "wtem_initxtileagshare2", "wpre_initxtileagshare2"])
+
+        table2 = DataFrame(Dependent_Variable = ["Temperature", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "", "Precipitation", "", "Poor country dummy", "", "Hot country dummy", "", "Agricultural country dummy", "" ],
+                           Model1 = [col1["julia"]["wtem"]["coeff"], "($(col1["julia"]["wtem"]["st. error"]))", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+                           Model2 = [col2["julia"]["wtem"]["coeff"], "($(col2["julia"]["wtem"]["st. error"]))", col2["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col2["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", "", "", "", "", "", "", "", "", "", "" ],
+                           Model3 = [col3["julia"]["wtem"]["coeff"], "($(col3["julia"]["wtem"]["st. error"]))", col3["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col3["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", "", "", col3["julia"]["wpre"]["coeff"], "($(col3["julia"]["wpre"]["st. error"]))", col3["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col3["julia"]["wpre_initxtilegdp1"]["st. error"]))", "", "", "", "" ],
+                           Model4 = [col4["julia"]["wtem"]["coeff"], "($(col4["julia"]["wtem"]["st. error"]))", col4["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col4["julia"]["wtem_initxtilegdp1"]["st. error"]))", col4["julia"]["wtem_initxtilewtem2"]["coeff"], "($(col4["julia"]["wtem_initxtilewtem2"]["st. error"]))", "", "", col4["julia"]["wpre"]["coeff"], "($(col4["julia"]["wpre"]["st. error"]))", col4["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col4["julia"]["wpre_initxtilegdp1"]["st. error"]))", col4["julia"]["wpre_initxtilewtem2"]["coeff"], "($(col4["julia"]["wpre_initxtilewtem2"]["st. error"]))", "", "" ],
+                           Model5 = [col5["julia"]["wtem"]["coeff"], "($(col5["julia"]["wtem"]["st. error"]))", col5["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col5["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wtem_initxtileagshare2"]["coeff"], "($(col5["julia"]["wtem_initxtileagshare2"]["st. error"]))", col5["julia"]["wpre"]["coeff"], "($(col5["julia"]["wpre"]["st. error"]))", col5["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col5["julia"]["wpre_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wpre_initxtileagshare2"]["coeff"], "($(col5["julia"]["wpre_initxtileagshare2"]["st. error"]))" ])
+
+        pretty_table(table2, backend = Val(:html))
+
 
     end
 
@@ -910,7 +911,7 @@ module DellReplicate
         for (dataset, info) in Dict("Julia" => ["climate_panel_csv.csv", coeffs_dictJ],
                                         "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
             for var in ["wtem", "const", "RY13X_SEAS"]
-                println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
+                #println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
             end
         end
 
@@ -920,8 +921,10 @@ module DellReplicate
 
     end
 
+        #figure1_visualise_graph1("climate_panel_csv.csv")
         #figure1_visualise_graph2("climate_panel_csv.csv")
-        #make_table2("climate_panel_csv.csv")
+        #figure2_visualise("climate_panel_csv.csv")
+        #make_table1("climate_panel_csv.csv")
         make_table1("climate_panel_csv.csv")
 
 end
