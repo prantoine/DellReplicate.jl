@@ -14,7 +14,8 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://prantoine.github.io/DellReplicate.jl",
         edit_link="main",
-        assets=String[],
+        assets=String["assets/fig1_graph1.png", 
+                      "assets/fig1_graph2.png"],
     ),
     pages=[
         "Home" => "index.md",

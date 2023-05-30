@@ -12,5 +12,4 @@ qr_method
 create_cluster
 two_way_clustered_sterrs
 check_coeffs_table2
-figure1_visualise_graph2
 ```
