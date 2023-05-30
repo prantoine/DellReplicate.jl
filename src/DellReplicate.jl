@@ -132,6 +132,8 @@ module DellReplicate
     """
     function figure1_visualise_graph2(df_name::String)
         
+        @info "Function figure1_visualise_graph2 has been called."
+
         df_ready_for_fig = figure1_data_cleaner(df_name)
         p1 = @df df_ready_for_fig plot(size=(800,600))
         sub_df_array = [ collect(df_ready_for_fig[row_ind, [:wpremin, :wpremax, :lngdp2000, :country_code]]) for (row_ind, row) in enumerate(eachrow(df_ready_for_fig))]
@@ -165,6 +167,8 @@ module DellReplicate
 
         savefig(p1, "fig1_graph2.png")
 
+        @info "End of function figure1_visualise_graph2. The plot has been saved in ./assets"
+
     end
 
     """
@@ -176,6 +180,7 @@ module DellReplicate
     """
     function figure1_visualise_graph1(df_name::String)
         
+        @info "Function figure1_visualise_graph1 called."
         
         clean_df = figure1_data_cleaner(df_name)
 
@@ -215,6 +220,8 @@ module DellReplicate
         title!("Temperature\nWeighted by population", )
 
         savefig(p1, "fig1_graph1.png")
+
+        @info "End of function figure1_visualise_graph1. The plot has been saved in ./assets"
 
     end
 
@@ -420,6 +427,8 @@ module DellReplicate
     """
     function figure2_visualise(df_name::String)
 
+        @info "Function figure2_visualise called."
+
         climate_panel = read_csv(df_name)
         filter!(:year => <=(2003), climate_panel)
 
@@ -586,6 +595,8 @@ module DellReplicate
         fig2 = plot(p, p2, layout = (2, 1), size = (800, 600))
         # Save the `fig2` in the current cd
         savefig(fig2, "fig2.png")
+
+        @info "End of function figure1_visualise_graph2. Figure saved in ./assets"
            
 
     end
@@ -597,6 +608,8 @@ module DellReplicate
     This function transform the data and produce summary statistics. It returns two `DataFrame` and presents them as pretty tables. The first table, `table1`, shows the proportion of country with temperature above or below country mean with a certain bin, and the second table, `table2`, is giving the same information about the precipation with 100mm units for the thresholds. 
     """
     function make_table1(raw_df_name::String)
+
+        @info "Function make_table1 called."
 
         #Read the data
         climate_panel = read_csv(raw_df_name)
@@ -677,7 +690,7 @@ module DellReplicate
         end
         table1 = DataFrame(Statistic= ["Raw Data","Without year FE"], Quarter = [a[1], b[1]], Half = [a[2], b[2]], ThreeQuarter = [a[3], b[3]], One = [a[4], b[4]], One_and_quarter = [a[5],b[5]], One_and_half=[a[6], b[6]])
         # Display the table with pkg PrettyTables.jl
-        pretty_table(table1, backend = Val(:html))
+        pretty_table(table1)
 
         # This part is for the second table
         # Creating two arrays to store the statistics
@@ -690,7 +703,10 @@ module DellReplicate
         end
         table2 = DataFrame(Statistic= ["Raw Data","Without year FE"], One = [c[1], d[1]], Two = [c[2], d[2]], Three = [c[3], d[3]], Four = [c[4], d[4]], Five = [c[5],d[5]], Six=[c[6], d[6]])
         # Display the second table
-        pretty_table(table2, backend = Val(:html))
+        pretty_table(table2)
+
+        @info "End of function make_table1. "
+
     end
 
     """
@@ -701,6 +717,9 @@ module DellReplicate
     matching the style of `Table 2` in the paper.
     """
     function make_table2(raw_df_name::String)
+        
+        @info "Function make_table2 called."
+
         climate_panel = read_csv(raw_df_name)
 
         filter!(:year => <=(2003), climate_panel)
@@ -774,8 +793,9 @@ module DellReplicate
                            Model4 = [col4["julia"]["wtem"]["coeff"], "($(col4["julia"]["wtem"]["st. error"]))", col4["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col4["julia"]["wtem_initxtilegdp1"]["st. error"]))", col4["julia"]["wtem_initxtilewtem2"]["coeff"], "($(col4["julia"]["wtem_initxtilewtem2"]["st. error"]))", "", "", col4["julia"]["wpre"]["coeff"], "($(col4["julia"]["wpre"]["st. error"]))", col4["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col4["julia"]["wpre_initxtilegdp1"]["st. error"]))", col4["julia"]["wpre_initxtilewtem2"]["coeff"], "($(col4["julia"]["wpre_initxtilewtem2"]["st. error"]))", "", "" ],
                            Model5 = [col5["julia"]["wtem"]["coeff"], "($(col5["julia"]["wtem"]["st. error"]))", col5["julia"]["wtem_initxtilegdp1"]["coeff"], "($(col5["julia"]["wtem_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wtem_initxtileagshare2"]["coeff"], "($(col5["julia"]["wtem_initxtileagshare2"]["st. error"]))", col5["julia"]["wpre"]["coeff"], "($(col5["julia"]["wpre"]["st. error"]))", col5["julia"]["wpre_initxtilegdp1"]["coeff"], "($(col5["julia"]["wpre_initxtilegdp1"]["st. error"]))", "", "", col5["julia"]["wpre_initxtileagshare2"]["coeff"], "($(col5["julia"]["wpre_initxtileagshare2"]["st. error"]))" ])
 
-        pretty_table(table2, backend = Val(:html))
+        pretty_table(table2)
 
+        @info "End of function make_table2"
 
     end
 
@@ -916,11 +936,11 @@ module DellReplicate
 
     end
 
-        #figure1_visualise_graph1("climate_panel_csv.csv")
-        #figure1_visualise_graph2("climate_panel_csv.csv")
-        #figure2_visualise("climate_panel_csv.csv")
-        #make_table1("climate_panel_csv.csv")
-        #make_table2("climate_panel_csv.csv")
+        figure1_visualise_graph1("climate_panel_csv.csv")
+        figure1_visualise_graph2("climate_panel_csv.csv")
+        figure2_visualise("climate_panel_csv.csv")
+        make_table1("climate_panel_csv.csv")
+        make_table2("climate_panel_csv.csv")
 
 end
 
