@@ -14,12 +14,16 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://prantoine.github.io/DellReplicate.jl",
         edit_link="main",
-        assets=String[],
+        assets=String["assets/fig1_graph1.png", 
+                      "assets/fig1_graph2.png"],
     ),
     pages=[
         "Home" => "index.md",
+        "General functions" => "generalfunctions.md",
         "Figure 1" => "figure1.md",
+        "Figure 2" => "figure2.md",
         "Table 1" => "table1.md",
+        "Table 2" => "table2.md"
     ],
 )
 

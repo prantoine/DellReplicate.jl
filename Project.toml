@@ -14,13 +14,22 @@ Impute = "f7bf1975-0170-51b9-8c5f-a992d46b9575"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 WorkerUtilities = "76eceee3-57b5-4d4a-8e66-0e911cebbf60"
 
 [compat]
+BenchmarkTools = "1"
+CSV = "0.10"
+DataFrames = "1"
+Documenter = "0.27"
+Impute = "0.6"
+Plots = "1"
+PrettyTables = "2"
+ShiftedArrays = "2"
 julia = "1.8"
 
 [extras]
