@@ -15,11 +15,10 @@ module DellReplicate
     using GLM
     using LinearAlgebra
     
-
     """
         gen_vars_fig1!(df::DataFrame)
 
-    Generates the necessary mean temperature and pDegreeirecipitation variables for the two graphs of `Figure 1`, given the climate panel data.
+    Generates the necessary mean temperature and precipitation variables for the two graphs of `Figure 1`, given the climate panel data.
     Returns the modified version of input `df`.
     """
     function gen_vars_fig1!(df)
@@ -58,7 +57,7 @@ module DellReplicate
         read_csv(fn::String)
 
     Creates a `DataFrame` object from a `.csv` file, where `fn` is the file name. May only work if ran from a directory where `assets` if is in the same
-    parent directory. 
+    parent directory. Finally, it changes the current directory to `assets` to save the figures.
     """
     function read_csv(fn::String)
 
@@ -907,16 +906,6 @@ module DellReplicate
         sterrsS = [ var > 0 ? sqrt(var) : var for var in diag(covarsS) ]
         coeffs_dictS = Dict( value => Dict("coeff" => coeffsS[find_regressor_posS[value]], "st. error" => sterrsS[find_regressor_posS[value]]) for value in keys(find_regressor_posS) )
 
-        #check manually for differences.
-        for (dataset, info) in Dict("Julia" => ["climate_panel_csv.csv", coeffs_dictJ],
-                                        "Stata" => ["climate_panel_b4reg.csv", coeffs_dictS])
-            for var in ["wtem", "const", "RY13X_SEAS"]
-                #println("DATASET: $dataset (full name: $(info[1])) => The OLS for var $var is $(info[2]["$var"])")
-            end
-        end
-
-        println("\n")
-
         return Dict("julia" => coeffs_dictJ, "stata" => coeffs_dictS)
 
     end
@@ -925,7 +914,7 @@ module DellReplicate
         #figure1_visualise_graph2("climate_panel_csv.csv")
         #figure2_visualise("climate_panel_csv.csv")
         #make_table1("climate_panel_csv.csv")
-        make_table1("climate_panel_csv.csv")
+        #make_table2("climate_panel_csv.csv")
 
 end
 
