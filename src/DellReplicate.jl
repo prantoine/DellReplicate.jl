@@ -411,13 +411,14 @@ module DellReplicate
     """
         make_table_1(raw_df_name::String)
     
-    Create summary statistics of the Data.
-
+    This function transform the data and produce summary statistics. It returns two `DataFrame` and presents them as pretty tables. The first table, `table1`, shows the proportion of country with temperature above or below country mean with a certain bin, and the second table, `table2`, is giving the same information about the precipation with 100mm units for the tresholds. 
     """
     function make_table1(raw_df_name::String)
 
+        #Read the data
         climate_panel = read_csv(raw_df_name)
 
+        #Keep only year inferior or equal to 2003
         filter!(:year => <=(2003), climate_panel)
 
         
@@ -456,18 +457,10 @@ module DellReplicate
             filter_transform!(climate_panel,:misdum => ==(1), var => (b -> (b=missing)) => var)
         end
         
-        # temp1 = copy(climate_panel)
-        # temp1 = dropmissing(temp1, :lnrgdpl_t0)
-        # sort!(temp1, :fips60_06)
-        # temp1 = combine(first, groupby(temp1, :fips60_06))
-        # temp1[!, :initgdpbin] .= log.(temp1.lnrgdpl_t0) / size(temp1)[1]
-        # #CAREFUL ABOUT THE SORTING
-        # sort!(temp1, :initgdpbin)
-        # temp1[!, :initgdpbin] .= ifelse.(temp1.initgdpbin .< temp1[Int(round(size(temp1)[1] / 2)), :initgdpbin], 1 ,2)
-        # select!(temp1, [:fips60_06, :initgdpbin])
-        # println(temp1[!,[:fips60_06, :initgdpbin]])
+
         climate_panel = gen_xtile_vars(climate_panel)
-        
+    
+        # Create interaction variables between temperature, precipitation and quantils variables       
         for var in ["wtem", "wpre"]
             climate_panel[!, "$(var)Xlnrgdpl_t0"] .= climate_panel[!, var] .* climate_panel[!, "lnrgdpl_t0"]
             for name in ["initxtilegdp1", "initxtilegdp2", "initxtilewtem1", "initxtilewtem2", "initxtileagshare1", "initxtileagshare2"]
@@ -483,7 +476,7 @@ module DellReplicate
             climate_panel[!,Symbol(var, "_withoutcountryyr")] .= climate_panel[!,Symbol(var, "_withoutcountrymean")] .- climate_panel[!,Symbol(var, "temp", "_yr")]
         end
         
-        #println(count(x -> isequal(x,true), climate_panel[!,:wtem] .> climate_panel[!, :wtemcountrymean])/size(climate_panel[!,:wtem])[1])
+        # Creating a function that returns true if the difference x abs value is greater than the tolerance
         function neighborhood(t, x)
             if abs(x) >= t 
                 return true
@@ -491,14 +484,9 @@ module DellReplicate
                 return false
             end
         end
-        Res = []
-        # for var in [:wtem, :wpre]
-        #     for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
-        #         println("The percentage of $var $t below/above countrymean is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountrymean")])/size(climate_panel[!,var])[1])")
-        #         println("The percentage of $var $t below/above countrymean without year fixed effect is $(count(x -> neighborhood(t,x), climate_panel[!,Symbol(var, "_withoutcountryyr")])/size(climate_panel[!,var])[1])")
-        #     end
-        # end
         
+        # This part is for the first table 
+        # Creating two arrays to store the statistics
         a = Float64[]
         b = Float64[]
         for t in [0.25, 0.5, 0.75, 1, 1.25, 1.5]
@@ -506,10 +494,12 @@ module DellReplicate
                 push!(a,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountrymean])/size(climate_panel[!,:wtem])[1], digits = 3))
                 push!(b,round(count(x -> neighborhood(t,x), climate_panel[!,:wtem_withoutcountryyr])/size(climate_panel[!,:wtem])[1], digits = 3))
         end
-        # println(a, b)
         table1 = DataFrame(Statistic= ["Raw Data","Without year FE"], Quarter = [a[1], b[1]], Half = [a[2], b[2]], ThreeQuarter = [a[3], b[3]], One = [a[4], b[4]], One_and_quarter = [a[5],b[5]], One_and_half=[a[6], b[6]])
+        # Display the table with pkg PrettyTables.jl
         pretty_table(table1)
 
+        # This part is for the second table
+        # Creating two arrays to store the statistics
         c = Float64[]
         d = Float64[]
         for t in [1, 2, 3, 4, 5, 6]
@@ -517,8 +507,8 @@ module DellReplicate
                 push!(c, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountrymean])/size(climate_panel[!,:wpre])[1], digits = 3))
                 push!(d, round(count(x -> neighborhood(t,x), climate_panel[!,:wpre_withoutcountryyr])/size(climate_panel[!,:wpre])[1], digits = 3))
         end
-        #println(c, d)
         table2 = DataFrame(Statistic= ["Raw Data","Without year FE"], One = [c[1], d[1]], Two = [c[2], d[2]], Three = [c[3], d[3]], Four = [c[4], d[4]], Five = [c[5],d[5]], Six=[c[6], d[6]])
+        # Display the second table
         pretty_table(table2)
     end
 
@@ -744,8 +734,9 @@ module DellReplicate
 
     end
 
-        figure1_visualise_graph2("climate_panel_csv.csv")
+        #figure1_visualise_graph2("climate_panel_csv.csv")
         #make_table2("climate_panel_csv.csv")
+        make_table1("climate_panel_csv.csv")
 
 end
 
