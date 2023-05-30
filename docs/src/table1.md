@@ -5,7 +5,8 @@ CurrentModule = DellReplicate
 
 This page contains the specific functions used to create `Table 1`. Some functions which are common to multiple tables/figures may not be present.
 
-## Table 1
+## Proportion of country-years with temperature … degrees above/below country mean
+
 ```@raw html
 <table>
   <thead>
@@ -50,7 +51,7 @@ This page contains the specific functions used to create `Table 1`. Some functio
   </tbody>
 </table>
 ```
-## Table 2
+## Proportion of country-years with precipitation … 100 mm units above/below country mean
 
 ```@raw html
 <table>

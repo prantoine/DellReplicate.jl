@@ -9,6 +9,6 @@ This page contains the functions used to generate ` Figure 2` of Dell (2012). Th
 ![Figure 2](assets/fig2.png)
 
 ```@docs
-figure2_visualize
+figure2_visualise
 HCE
 ```

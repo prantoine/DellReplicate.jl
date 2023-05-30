@@ -10,11 +10,15 @@ Follow these steps to run the package:
 ```
 git clone https://github.com/prantoine/DellReplicate.jl.git
 ```
-3)  Launch a `Julia REPL`
-4)  type `]` followed by `activate .` to start the package environment
-5)  Type `instantiate` to download the necessary dependencies
-6)  Exit the package mode
-7)  Start the module by typing
+3)  Go into the newly created directory
+```
+cd DellReplicate.jl
+```
+4)  Launch a `Julia REPL`
+5)  type `]` followed by `activate .` to start the package environment
+6)  Type `instantiate` to download the necessary dependencies
+7)  Exit the package mode
+8)  Start the module by typing
 ```
 include("src/DellReplicate.jl")
 ```
