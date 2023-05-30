@@ -6,6 +6,7 @@ CurrentModule = DellReplicate
 This page contains the specific functions used to create `Table 1`. Some functions which are common to multiple tables/figures may not be present.
 
 ## Table 1
+```@raw html
 <table>
   <thead>
     <tr class = "header">
@@ -48,9 +49,10 @@ This page contains the specific functions used to create `Table 1`. Some functio
     </tr>
   </tbody>
 </table>
-
+```
 ## Table 2
 
+```@raw html
 <table>
   <thead>
     <tr class = "header">
@@ -93,6 +95,7 @@ This page contains the specific functions used to create `Table 1`. Some functio
     </tr>
   </tbody>
 </table>
+```
 
 ```@docs
 make_table1

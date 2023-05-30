@@ -421,9 +421,9 @@ module DellReplicate
     end
     """
 
-        figure2_visualize(df_name::String)
+        figure2_visualise(df_name::String)
 
-    After applying the cleaning figure2_visualize plots two graph combined in one and saves this combined plot under the file `fig2.png`. The function HCE is called and enables to compute the confidence interval using the Heteroskedastic consistent standard erros.
+    After applying the cleaning figure2_visualise plots two graph combined in one and saves this combined plot under the file `fig2.png`. The function HCE is called and enables to compute the confidence interval using the Heteroskedastic consistent standard erros.
     """
     function figure2_visualise(df_name::String)
 

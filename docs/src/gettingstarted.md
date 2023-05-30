@@ -1,6 +1,6 @@
 # The paper
 This work is based on the paper "Temperature Shocks and Economic Growth: Evidence from the Last Half Century" published by M. Dell, Benjamin F. Jones and Benjamin A. Olken in 2012. It shows that in countries with higher temperatures, GDP growth is lower than in countries with lower temperatures. This is not true for precipitation. We replicate their results by writing code entirely in `Julia` and find very similar results.
-<br /><br />
+
 Running this package produces three figures which are locally saved, as well as the main results of the paper (Table 2) which are displayed in the terminal. These results are all available on this website, as well as a description of the different functions of the source code.
 # How to run the package
 
@@ -23,8 +23,8 @@ Relevant graphs will be saved under the `./assets` directory, and tables printed
 # References
 
 Dell, M. and Jones, B. F. and Olken, B. A. (2012) "Temperature Shocks and Economic Growth: Evidence from the Last Half Century", *American Economic Journal: Macroeconomics*, Vol. 4, No. 3, pp. 66-95.
-<br /><br />
+
 Cameron, A. and Gelbach, J. B. and Miller, D. L. (2011) "Robust inference with multiway clustering", *Journal of Business & Economic Statistics*,  Vol. 29, No. 2, pp. 238-249.
-<br /><br />
+
 Engler, H. (1997) "The Behavior of the QR-Factorization
 Algorithm with Column Pivoting", *Appl. Math. Lett.*, Vol. 10, No. 6, pp. 7-11.

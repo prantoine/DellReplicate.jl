@@ -6,6 +6,7 @@ CurrentModule = DellReplicate
 
 The main function for `Table 2` is `make_table2` which calls various functions as shown below. 
 
+```@raw html
 <table>
   <thead>
     <tr class = "header">
@@ -148,9 +149,11 @@ The main function for `Table 2` is `make_table2` which calls various functions a
     </tr>
   </tbody>
 </table>        
-Standard errors are in parentheses. They differ slighlty from those reported in the paper due to the way Stata computes them. The method we chose does not allow us to apply a correction to the computation of `B` in the function `two_way_clustered_sterrs()`. In particual, following the method proposed by Cameron et al. (2011), we would have to multiply $u$ by $\sqrt{c}$ where $c = \frac{G}{G-1}$
- and $G$ is equal to the number of observations in each cluster. However, the number of observations in the interaction of the clusters `country` and `region-year` is often 1, resulting in an error. This produces a downward bias on our computed standard errors, which remain fairly close to the results reported by the authors. 
-<br /><br />
+```
+
+Standard errors are in parentheses. They differ slighlty from those reported in the paper due to the way Stata computes them. The method we chose does not allow us to apply a correction to the computation of `B` in the function `two_way_clustered_sterrs()`. In particual, following the method proposed by Cameron et al. (2011), we would have to multiply ``u`` by ``\sqrt{c}`` where ``c = \frac{G}{G-1}``
+ and ``G`` is equal to the number of observations in each cluster. However, the number of observations in the interaction of the clusters `country` and `region-year` is often 1, resulting in an error. This produces a downward bias on our computed standard errors, which remain fairly close to the results reported by the authors. 
+
 
 ```@docs
 make_table2
